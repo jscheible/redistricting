@@ -3,6 +3,7 @@ from BlockGroup import BlockGroup
 class District:
     count = 0
     districts = []
+    population = 0
     
     def __init__( self ):
         self.id = District.count
@@ -13,7 +14,7 @@ class District:
         self.neighboring_districts = []
         self.perimeter_up_to_date = True
         District.districts.append( self )
-        
+
     def info():
         print( '--------------------------' )
         for district in District.districts:
@@ -33,6 +34,7 @@ class District:
         self.block_groups.append( block_group )
         self.perimeter_up_to_date = False
         self.population += block_group.population
+        District.population += block_group.population
         block_group.addToDistrict( self.id )
 
     def delBlockGroup( self, block_group ):
@@ -42,6 +44,7 @@ class District:
             block_group.district = None
             self.perimeter_up_to_date = False
             self.population -= block_group.population
+            District.population -= block_group.population
         except ValueError:
             pass
 
@@ -120,16 +123,13 @@ class District:
 
     def reducePopulation( self ):
         totalTransferred = 0
-        nCurrent = self.population
-        nTransferred = -1
-        while nTransferred != 0:
-            nTransferred = 0
-
+        while True:
             # Collect all blocks that border less populated districts
             candidates = []
             
             # Loop over block groups in current district
             for candidate in self.block_groups:
+
                 # print( 'Finding neighbors of %d' %block_group.id )
                 neighboring_districts = []
                 # Loop over neighboring block groups to collect their district IDs
@@ -141,53 +141,81 @@ class District:
                     # Skip blocks that are in the same district
                     if neighbor_district_id == self.id: continue
 
+                    
                     # If neighboring district is not in the list, add it
-                    nieghbor_district = District.districts[neighbor_district_id]
+                    neighbor_district = District.districts[neighbor_district_id]
                     if neighbor_district not in neighboring_districts:
                         neighboring_districts.append( neighbor_district )
+
+                # If we actually have any neighboring districts,
+                # ensure we can remove this block group and still
+                # have a contiguous district.
+                if len(neighboring_districts) > 0:
+                    self.delBlockGroup( candidate )
+                    contiguous = self.isContiguous()
+                    self.addBlockGroup( candidate )
+                    if not contiguous: continue 
 
                 # Loop over neighboring districts
                 for neighbor_district in neighboring_districts:
 
                     # If this candidate for transfer has a population less than
-                    # the difference in populations between the two districts
+                    # the difference in populations between the two districts.
+                    # If the neighbor is larger, this check will certainly fail.
                     pop_diff = self.population - neighbor_district.population
                     if  candidate.population < pop_diff:
 
                         # The change in total population difference will be twice
                         # the difference between the population of the candidate
-                        # and the current difference
+                        # and the current difference between the districts
                         dPopDiff = 2 * ( pop_diff - candidate.population )
                         
+                        # ---------------------------------------------------------
                         # Determine difference in total perimeter for this district
-                        # Will lose this block group's borders with other districts,
-                        # and will gain this block group's borders with this district
-                        dPerimSelf = 0.0
-                        for tmp in block_group.neighbors:
-                            if self.id != tmp.block_group.district:
-                                dPerimSelf -= tmp.block_group.border
-                            else:
-                                dPerimSelf += tmp.block_group.border
+                        # ---------------------------------------------------------
 
-                        # Neighbor will gain this block group's borders with other districts,
-                        # and will lose this block group's borders with neighbor district
-                        dPerimNeighbor = 0.0
-                        for tmp in block_group.neighbors:
-                            if neighbors_district_id != tmp.block_group.district:
-                                dPerimNeighbor += tmp.block_group.border
+                        # This district will lose this block group's borders with other
+                        # districts, and gain this block group's borders with itself.
+                        dPerimSelf = 0.0
+                        for tmp in candidate.neighbors:
+                            if self.id != tmp.block_group.district:
+                                dPerimSelf -= tmp.border_len
                             else:
-                                dPerimNeighbor -= tmp.block_group.border
+                                dPerimSelf += tmp.border_len
+
+                        # Neighboring district will gain this block group's borders with
+                        # other districts, and lose this block group's borders with itself.
+                        dPerimNeighbor = 0.0
+                        for tmp in candidate.neighbors:
+                            if neighbor_district.id != tmp.block_group.district:
+                                dPerimNeighbor += tmp.border_len
+                            else:
+                                dPerimNeighbor -= tmp.border_len
                         
-                        # Determine difference in total perimeter for neighbors
+                        # Determine the total change in perimeters
                         dPerim = dPerimSelf + dPerimNeighbor
 
                         # Save all this in our candidates list
-                        candidates.append( (candidate.id, neighbors_district_id, dPopDiff, dPerim ) )
-                        
-                    
-            print( 'Num transferred: %d' %nTransferred )
-            totalTransferred += nTransferred
-            if nTransferred == 0:
-                break
+                        candidates.append( (candidate, neighbor_district, dPopDiff, dPerim ) )
+
+            # If there are no candidate block groups to move, break out of loop
+            if len(candidates) == 0: break
+            
+            # Find the candidate block group to transfer which most reduces
+            # total perimeter (or increases total perimeter the least.)
+            best = candidates[0]
+            for ndx in list(range(1,len(candidates))):
+                if candidates[ndx][3] < best[3]:
+                    best = candidates[ndx]
+
+            # Transfer best candidate
+            candidate = best[0]
+            neighbor_district = best[1]
+            neighbor_district.addBlockGroup( candidate )
+            print( 'Block Group %d transferred from %d to %d'
+                   %(candidate.id, self.id, neighbor_district.id ) )
+            totalTransferred += 1
+            
+        print( 'Num transferred: %d' %totalTransferred )
 
         return totalTransferred

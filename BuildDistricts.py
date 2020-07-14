@@ -151,7 +151,7 @@ def minimizeTotalPerimeter():
             # Loop over neighbors
             for neighbor in block_group.neighbors:
                neighbor_district = District.districts[neighbor.block_group.district]
-               if ( neighbor_district == this_district ): continue
+               if neighbor_district == this_district: continue
 
                # Get district perimeters
                this_perimeter = this_district.getPerimeter()
@@ -179,18 +179,45 @@ def minimizeTotalPerimeter():
         totalPerimeter = sum( district_perimeters ) / 1000.0
 
 def balancePopulations():
-    # Loop through districts
+    margin = 0.1
+    avgPop = District.population / District.count
+    
+    # Loop through districts to get populations
+    populations = []
     for district in District.districts:
-        # Find neighboring districts
-        for block_group in district.block_groups:
-            for neighbor in block_group.neighbors:
-                if ( neighbor.block_group.district != district.id ):
-                    if ( neighbor.block_group.district not in district.neighboring_districts ):
-                        district.neighboring_districts.append( neighbor.block_group.district )
+        populations.append( district.population )
+        
+        max_pop = max( populations )
+        min_pop = min( populations )
 
-    for district in District.districts:
-        print( district.id )
-        print( district.neighboring_districts )
+    loop_count = 0
+    print( 'Loop: ', loop_count )
+    print( '   Min Pop: ', min_pop )
+    print( '   Max Pop: ', max_pop )
+    print( '   Factor: ',  ((max_pop - min_pop) / avgPop) )
+
+    # While these differ by more than margin
+    while (max_pop - min_pop) / avgPop > margin:
+        loop_count += 1
+        for district in District.districts:
+            district.reducePopulation()
+
+        # Recompute max and min populations
+        populations.clear()
+        for district in District.districts:
+            populations.append( district.population )
+        
+            max_pop = max( populations )
+            min_pop = min( populations )
+
+        print( 'Loop: ', loop_count )
+        print( '   Min Pop: ', min_pop )
+        print( '   Max Pop: ', max_pop )
+        print( '   Factor: ',  ((max_pop - min_pop) / avgPop) )
+            
+
+    
+        
 
 def plotDistricts():
     # Add district columns
@@ -291,10 +318,15 @@ print( 'avgBlockGroups: ', avgBlockGroups )
 buildDistricts()
 print( 'First Build:' )
 District.info()
+# plotDistricts()
+
+# Try to equalize populations
+balancePopulations()
 plotDistricts()
 
+exit()
+
 minimizeTotalPerimeter()
-plotDistricts()
 
 # Allow below average districts to poach from larger neighbors, up to average
 largest, nLargest = District.getLargest()
