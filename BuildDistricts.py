@@ -49,10 +49,8 @@ def buildDistricts():
                 
                 # Loop over neighboring block groups
                 for neighbor in block_group.neighbors:
-                    # print( 'Checking block group %d' %neighbor.block_group.id )
                     # If neighboring block group is not used...
                     if ( neighbor.block_group.district == None ):
-                        # print( '  Adding block group %d to district %d' %( neighbor.block_group.id, district.id ) )
                         district.addBlockGroup( neighbor.block_group )
 
 
@@ -178,47 +176,6 @@ def minimizeTotalPerimeter():
             district_perimeters.append( district.getPerimeter() )
         totalPerimeter = sum( district_perimeters ) / 1000.0
 
-def balancePopulations():
-    margin = 0.1
-    avgPop = District.population / District.count
-    
-    # Loop through districts to get populations
-    populations = []
-    for district in District.districts:
-        populations.append( district.population )
-        
-        max_pop = max( populations )
-        min_pop = min( populations )
-
-    loop_count = 0
-    print( 'Loop: ', loop_count )
-    print( '   Min Pop: ', min_pop )
-    print( '   Max Pop: ', max_pop )
-    print( '   Factor: ',  ((max_pop - min_pop) / avgPop) )
-
-    # While these differ by more than margin
-    while (max_pop - min_pop) / avgPop > margin:
-        loop_count += 1
-        for district in District.districts:
-            district.reducePopulation()
-
-        # Recompute max and min populations
-        populations.clear()
-        for district in District.districts:
-            populations.append( district.population )
-        
-            max_pop = max( populations )
-            min_pop = min( populations )
-
-        print( 'Loop: ', loop_count )
-        print( '   Min Pop: ', min_pop )
-        print( '   Max Pop: ', max_pop )
-        print( '   Factor: ',  ((max_pop - min_pop) / avgPop) )
-            
-
-    
-        
-
 def plotDistricts():
     # Add district columns
     cong_dist = []
@@ -281,6 +238,62 @@ def used_to_be_this():
 
     # BlockGroup.plotEmbeddedBlockGroups()
     exit()
+
+def findWorstProtrusion():
+    border_lengths = [0.0] * nDistricts
+    # Find a block group that is a border district,
+    neighboring_districts = set()
+    for block_group in BlockGroup.block_groups:
+        # Collect all neighboring districts
+        neighboring_districts.clear()
+        for neighbor in block_group.neighbors:
+            neighboring_districts.add( neighbor.block_group.district )
+
+        # If this block group has only one neighboring district (its own),
+        # it is not a border group.
+        if len( neighboring_districts ) == 1:
+            continue
+
+        # Collect at least 20 neighbors in the same district
+        # Continue to accumulate neighboring districts
+        plot_these = [block_group]
+        while len(plot_these) < 20:
+            for ii in list(range(len(plot_these))):
+                tmp = plot_these[ii]
+                for neighbor in tmp.neighbors:
+                    neighboring_districts.add( neighbor.block_group.district )
+                    if neighbor.block_group.district == block_group.district:
+                        if neighbor.block_group not in plot_these:
+                            plot_these.append( neighbor.block_group )
+
+        # Count how many are border groups
+        num_border_block_groups = 0
+        for tmp in plot_these:
+            for neighbor in tmp.neighbors:
+                if neighbor.block_group.district != block_group.district:
+                    num_border_block_groups += 1
+                    break
+
+        # Get length of border between this group and all districts
+        border_lengths.clear()
+        border_lengths = [0.0] * nDistricts
+
+        for district in neighboring_districts:
+            border_lengths[district] = District.getBorderWithDistrict( plot_these, district )
+
+        # If the groups' border with the parent district is less than another
+        self_border = border_lengths[block_group.district]
+        others = sum(border_lengths) - self_border
+        border_ratio = others / self_border
+        if border_ratio > 2.3:
+            best_district = border_lengths.index(max(border_lengths))
+            print ( 'Block Group: %4d' %block_group.id )
+            # print( plot_these )
+            print( '    Border length:    %.2f' %border_lengths[district] )
+            print( '    Border with %4d:  %.2f'
+                   %(best_district, border_lengths[best_district] ) )
+            print( '    Border Ratio: %.2f' %border_ratio )
+            District.showDistrictAndBlock( block_group.district, plot_these )
     
 # ---------------------------------------------------------------------
 #  START HERE
@@ -291,6 +304,10 @@ CE = 2*math.pi*RE  # Circumference of the earth in meters
 
 # There are 11 Congressional districts in VA
 nDistricts = 11
+
+# tolerance is the largest permissible value
+# for population sd/avg
+tolerance = 0.05
 
 # Read data file
 data = gpd.read_file( "jax_tl_2010_51_bg10.shp" )
@@ -318,73 +335,27 @@ print( 'avgBlockGroups: ', avgBlockGroups )
 buildDistricts()
 print( 'First Build:' )
 District.info()
-# plotDistricts()
+plotDistricts()
 
+# Progressively make things better
 # Try to equalize populations
-balancePopulations()
-plotDistricts()
+for tol in [4*tolerance, 3*tolerance, 2*tolerance, tolerance]:
+    District.balancePopulations( tol/2.0 )
+    District.minimizeTotalPerimeter( tol )
 
-exit()
-
-minimizeTotalPerimeter()
-
-# Allow below average districts to poach from larger neighbors, up to average
-largest, nLargest = District.getLargest()
-print( 'type(largest) ', type(largest) )
-print( 'type(nLargest) ', type(nLargest) )
-
-while( nLargest > avgBlockGroups+2 ):
-    print( 'District %d has %d blockgroups.' %( largest.id, largest.numBlockGroups() ) )
-    nTransferred = largest.reduceBlockGroups()
-    print( 'Transferred: %d' %nTransferred )
-    print( 'District %d has %d blockgroups.' %( largest.id, largest.numBlockGroups() ) )
-    if nTransferred == 0:
-        for district in District.districts:
-            if district.numBlockGroups() > avgBlockGroups+2:
-                print( 'District %d has %d blockgroups.' %( district.id, district.numBlockGroups() ) )
-                nTransferred += district.reduceBlockGroups()
-                print( 'District %d has %d blockgroups.' %( district.id, district.numBlockGroups() ) )
-                
-    largest, nLargest = District.getLargest()
-    if nTransferred == 0: break
-    
-print( 'Equal Number of Block Groups:' )
+print( 'Final Build:' )
 District.info()
-
 plotDistricts()
+
+findWorstProtrusion()
+
+
 exit()
 
-
-# Compute perimeters of districts
-totalPerimeters = 0.0
-for district in districts:
-    print( 'District %d has a perimeter of %f meters'
-           %(district.id, district.getPerimeter() ) )
-    totalPerimeters += district.getPerimeter()/1000.0
-
-print( 'Total perimeter is %.0f km' % totalPerimeters )
-
-# Compute population of districts
-totalPopulation = 0.0
-for district in districts:
-    print( 'District %2d has a population of %10d people'
-           %(district.id, district.population ) )
-    totalPopulation += district.population
-print( 'Total population is %d people' % totalPopulation )
-
-print( '--------------------------' )
-
-
-
-
-# Compute population of districts
-totalPopulation = 0.0
-for district in districts:
-    print( 'District %2d has a population of %10d people'
-           %(district.id, district.population ) )
-    totalPopulation += district.population
-print( 'Total population is %d people' % totalPopulation )
-
-balancePopulations()
-print( "Pop Metric: %4f" %District.getPopMetric() )
-
+# If more than half are border groups, this is a protrusion
+print ( 'Block Group: %4d' %block_group.id )
+print ( '   len(plot_these): %2d' %len(plot_these) )
+print ( '   border blocks:   %2d' %num_border_block_groups )
+print ( 'Block Group: %4d', block_group.id )
+if num_border_block_groups >= (1./2.)*len(plot_these):
+    District.showDistrictAndBlock( block_group.district, plot_these )
