@@ -85,6 +85,25 @@ class BlockGroup:
         va.plot(column='isNeighbor')
         plt.show()
 
+    #-------------------------------------------------------------------------
+    # Returns the perimeter of the group of blocks specified.
+    #-------------------------------------------------------------------------
+    def getPerimeter( block_groups ):
+        perimeter = 0.0
+        # Ensure we do not double-count by using sets
+        block_group_set = set( block_groups )
+        for block_group in block_group_set:
+            # Add perimeter of block group to perimeter of group
+            perimeter += block_group.perimeter
+
+            # Loop over neighboring block groups
+            for neighbor in block_group.neighbors:
+                # If neighbor is in this group, subtract border length
+                if ( neighbor.block_group in block_group_set ):
+                    perimeter -= neighbor.border_len
+
+        return perimeter
+
     def isEmbedded( self ):
         return ( len(self.neighbors) == 1 and 
                  self.neighbors[0].border_len == self.perimeter )
