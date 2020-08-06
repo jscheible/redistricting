@@ -1,5 +1,4 @@
 #!/bin/python3
-import shapefile
 import censusdata
 import math
 import ast
@@ -8,7 +7,6 @@ import csv
 from tabulate import tabulate
 import plotly.figure_factory as ff
 import sys
-import tkinter
 import geopandas as gpd
 import earthpy
 import matplotlib.pyplot as plt
