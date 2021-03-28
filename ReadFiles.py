@@ -3,7 +3,6 @@ from shapely.geometry import Point, Polygon, MultiPolygon, shape, mapping, Multi
 from collections import OrderedDict
 import ast
 import numpy
-import shapefile
 import fiona
 import censusdata
 import math
@@ -18,7 +17,6 @@ import geopandas as gpd
 import earthpy
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-from blockgroup import BlockGroup
 
 # ---------------------------------------------------------------------
 #  LL_TO_M()
@@ -176,10 +174,7 @@ def write_shapefile( gdf ):
 # ---------------------------------------------------------------------
 
 # Read Shapefiles
-# sf = shapefile.Reader("census/tl_2010_51_bg10")
-# shapes = sf.shapes()
-
-va = gpd.read_file( "census/tl_2010_51_bg10.shp" )
+va = gpd.read_file( "../census/tl_2010_51_bg10.shp" )
 
 nObjects = len(va.index)
 print( 'There are %d entries.' %nObjects )
@@ -206,14 +201,14 @@ for ii in list(range(nObjects)):
             else:
                 nRec = len(va)
                 va.loc[nRec] = va.loc[ii]
-
-            va.set_value( nRec, 'geometry', polygons[jj] )
+                
+            # Set values for new row.
+            va.at[nRec, 'geometry'] = polygons[jj]
             pt = polygons[jj].representative_point()
             coords = list(pt.coords)
-            va.set_value( nRec, 'INTPTLON10', coords[0][0] )
-            va.set_value( nRec, 'INTPTLAT10', coords[0][1] )
-            va.set_value( nRec, 'POPULATION', 0 )
-
+            va.at[nRec, 'INTPTLON10'] = coords[0][0]
+            va.at[nRec, 'INTPTLAT10'] = coords[0][1]
+            va.at[nRec, 'POPULATION'] = 0
             
 print( 'Rechecking polygons...' )
 for ndx in va.index:
