@@ -514,7 +514,8 @@ class District:
     # until the required balance is met.
     #-----------------------------------------------------------------------
     def balancePopulations( tolerance ):
-        # tolerance: the largest allowable normalized standard deviation
+        # tolerance: the largest allowable difference in population,
+        #            divided by the average district poplation
 
         # Compute metrics
         pops = District.getDistrictPopulations()
