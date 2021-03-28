@@ -1,4 +1,4 @@
-#!/bin/python3
+#!/bin/python3 -ddd
 import censusdata
 import math
 import ast
@@ -186,58 +186,8 @@ def plotDistricts():
     data.plot(column='CongDist')
     plt.show()
 
-def used_to_be_this():
-    va_bg_pop = censusdata.download( 'sf1', 2010, censusdata.censusgeo([('state', '51'), ('county', '*'), ('block group', '*')]), ['P001001'] )
-
-    with open('VirginiaBlockGroupPerimeters.csv', newline='') as csvfile:
-        filereader = csv.reader(csvfile, delimiter=',')
-        for row in filereader:
-            block_group = BlockGroup()
-            block_group.perimeter = float(row[1])
-            try:
-                block_group.population = va_bg_pop.P001001[block_group.id]
-            except IndexError:
-                block_group.population = 0
-            
-    print( 'nBlockGroups: %d' %BlockGroup.getBlockGroupCount() )
-    print( 'BlockGroup.count: %d' %BlockGroup.count )
-
-    with open('VirginiaBlockGroupBorders.csv', newline='') as csvfile:
-        filereader = csv.reader(csvfile, delimiter=',')
-        for row in filereader:
-            ii = int( row[0] )
-            jj = int( row[1] )
-            border = float( row[2] )
-            print( ii, jj, border )
-        
-            block_group = BlockGroup.block_groups[ii]
-            neighbor = Neighbor( BlockGroup.block_groups[jj], border )
-            block_group.neighbors.append( neighbor )
-
-            # block_group = BlockGroup.block_groups[jj]
-            # neighbor = Neighbor( BlockGroup.block_groups[ii], border )
-            # block_group.neighbors.append( neighbor )
-
-    # Loop through all block groups
-    for block_group in BlockGroup.block_groups:
-        border_len = block_group.getBorderLen()
-        if ( border_len > block_group.perimeter + 0.1 ):
-            print( block_group.id, border_len, block_group.perimeter )
-            print( 'Block Group %d has a perimeter of %f and borders %f'
-                   %( block_group.id, block_group.perimeter, border_len ) )
-
-    # BlockGroup.plotBorder()
-
-    # Find embedded block groups
-    for block_group in BlockGroup.block_groups:
-        if block_group.isEmbedded():
-            print( 'Block Group %d is embedded.' %block_group.id )
-            block_group.plot()
-
-    # BlockGroup.plotEmbeddedBlockGroups()
-    exit()
-
 def findWorstProtrusion():
+    worst_ratio = 0.0
     border_lengths = [0.0] * nDistricts
     # Find a block group that is a border district,
     neighboring_districts = set()
@@ -279,20 +229,25 @@ def findWorstProtrusion():
         for district in neighboring_districts:
             border_lengths[district] = District.getBorderWithDistrict( plot_these, district )
 
-        # If the groups' border with the parent district is less than another
+        # If the groups' border with the parent district is less than with another
         self_border = border_lengths[block_group.district]
-        others = sum(border_lengths) - self_border
-        border_ratio = others / self_border
-        if border_ratio > 2.3:
+        perimeter = BlockGroup.getPerimeter( plot_these )
+        border_ratio = perimeter / self_border
+        if worst_ratio < border_ratio:
             best_district = border_lengths.index(max(border_lengths))
-            print ( 'Block Group: %4d' %block_group.id )
-            # print( plot_these )
-            print( '    Border length:    %.2f' %border_lengths[district] )
-            print( '    Border with %4d:  %.2f'
-                   %(best_district, border_lengths[best_district] ) )
-            print( '    Border Ratio: %.2f' %border_ratio )
-            District.showDistrictAndBlock( block_group.district, plot_these )
-    
+            if best_district != block_group.district:
+                worst_ratio = border_ratio
+                worst_protrusion = plot_these
+                worst_district = block_group.district
+                move_to_district = best_district
+                
+    print ( 'Block Group: %4d' %block_group.id )
+    # print( worst_protrusion )
+    print( '    Border Ratio: %.2f' %worst_ratio )
+    District.showDistrictAndBlock( worst_district, worst_protrusion )
+
+    return worst_protrusion, worst_ratio, move_to_district
+
 # ---------------------------------------------------------------------
 #  START HERE
 # ---------------------------------------------------------------------
@@ -304,7 +259,7 @@ CE = 2*math.pi*RE  # Circumference of the earth in meters
 nDistricts = 11
 
 # tolerance is the largest permissible value
-# for population sd/avg
+# for population diff/avg
 tolerance = 0.05
 
 # Read data file
@@ -345,8 +300,15 @@ print( 'Final Build:' )
 District.info()
 plotDistricts()
 
-findWorstProtrusion()
+worst_ratio = 100.0
+while worst_ratio > 3.0:
+    worst_protrusion, worst_ratio, move_to_district = findWorstProtrusion()
+    print( 'Worst Ratio: %4d' %worst_ratio )
+    for block_group in worst_protrusion:
+        District.districts[move_to_district].addBlockGroup( block_group )
 
+District.info()
+plotDistricts()
 
 exit()
 
