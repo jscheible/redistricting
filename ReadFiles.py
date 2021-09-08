@@ -35,16 +35,42 @@ def ll_to_m( point ):
 #  ADD_POPULATION_COLUMN()
 # ---------------------------------------------------------------------
 def add_population_column():
-    # Get population from census
-    va_bg_pop = censusdata.download( 'sf1', 2010, censusdata.censusgeo([('state', '51'), ('county', '*'), ('block group', '*')]), ['P001001'] )
+    total_population = 0
+    
+    # Pull GEOIDs and Population from geodata file
+    with open ( '../census/2020/Virginia/vageo2020.pl', 'r' ) as f:
+        geo_geoid   = [ row[8] for row in csv.reader(f,delimiter='|')]
 
-    print( va_bg_pop.P001001.values )
-    # Add block group column to va
-    va['BLOCKGROUP'] = [ ii for ii in list(range(len(va.index))) ]
+    with open ( '../census/2020/Virginia/vageo2020.pl', 'r' ) as f:
+        geo_pop = [ row[90] for row in csv.reader(f,delimiter='|')]
 
-    # Add population column to va 
-    va['POPULATION'] = va_bg_pop.P001001.values
+    # Add VTD column to va
+    va['VTD'] = [ ii for ii in list(range(len(va.index))) ]
 
+    # Add population column to va
+    va['POPULATION'] = [ 0 ] * len(va.index)
+
+    # Loop over shapes and get population
+    for ii in va.index:
+        try:
+            # Get logical record number from geodata
+            geoid20 = va.at[ii,'GEOID20']
+            ndx = '7000000US' + geoid20
+            print ( 'NDX: ' + ndx )
+            recno = geo_geoid.index(ndx)
+            print ( 'RECNO: ' + str(recno) )
+
+            print ( 'POP: ' + geo_pop[recno] )
+            # Get population with logical record number
+            va.at[ii,'POPULATION'] = geo_pop[recno]
+                                              
+        except ValueError:
+            va.at[ii,'POPULATION'] = 0
+
+        total_population += va.at[ii,'POPULATION']
+
+    print( 'TOTAL POPULATION: ' + str(total_population) )
+    
 # ---------------------------------------------------------------------
 #  ADD_PERIMETER_COLUMN()
 # ---------------------------------------------------------------------
@@ -97,7 +123,7 @@ def fill_holes( gdf ):
                         holes.remove( hole )
 
                         # Show what happened
-                        print( 'Block %4d matches a hole in %4d' %(jj, ii) )
+                        print( 'Voting District %4d matches a hole in %4d' %(jj, ii) )
 
                         # Add population to enclosing object
                         gdf.at[ii,'POPULATION'] += pop1
@@ -112,27 +138,28 @@ def fill_holes( gdf ):
                         continue
 
 def write_shapefile( gdf ):
-    columns =[ ('STATEFP10',  'str:2'),
-               ('COUNTYFP10', 'str:3'),
-               ('TRACTCE10',  'str:6'),
-               ('BLKGRPCE10', 'str:1'),
-               ('GEOID10',    'str:12'),
-               ('NAMELSAD10', 'str:13'),
-               ('MTFCC10',    'str:5'),
-               ('FUNCSTAT10', 'str:1'),
-               ('ALAND10',    'int:14'),
-               ('AWATER10',   'int:14'),
-               ('INTPTLAT10', 'str:11'),
-               ('INTPTLON10', 'str:12'),
+    columns =[ ('STATEFP20',  'str:2'),
+               ('COUNTYFP20', 'str:3'),
+               ('VTDST20',    'str:6'),
+               ('GEOID20',    'str:11'),
+               ('VTDI20',     'str:1'),
+               ('NAME20',     'str:100'),
+               ('NAMELSAD20', 'str:100'),
+               ('LSAD20',     'int:2'),
+               ('MTFCC20',    'str:5'),
+               ('FUNCSTAT20', 'str:1'),
+               ('ALAND20',    'int:14'),
+               ('AWATER20',   'int:14'),
+               ('INTPTLAT20', 'str:11'),
+               ('INTPTLON20', 'str:12'),
                ('PERIMETER',  'float'),
-               ('BLOCKGROUP', 'int:6'),
                ('POPULATION', 'int:14'),
                ('NEIGHBORS',  'str:512') ]
 
     shapefile_schema = {'properties': OrderedDict( columns ),
                         'geometry': 'Polygon' }
     
-    with fiona.open( './jax_tl_2010_51_bg10.shp', 'w',
+    with fiona.open( './jax_tl_2020_51_vtd20.shp', 'w',
                      driver = 'ESRI Shapefile',
                      crs = {'init': 'epsg:4269'},
                      schema = shapefile_schema ) as sink:
@@ -173,8 +200,8 @@ def write_shapefile( gdf ):
 #  MAIN PROGRAM
 # ---------------------------------------------------------------------
 
-# Read Shapefiles
-va = gpd.read_file( "../census/tl_2010_51_bg10.shp" )
+# Read Shapefile for Voting Districts
+va = gpd.read_file( "../census/2020/Virginia/tl_2020_51_vtd20.shp" )
 
 nObjects = len(va.index)
 print( 'There are %d entries.' %nObjects )
@@ -183,7 +210,7 @@ print( va.columns )
 add_population_column()
 print( va.columns )
 
-# Break up MultiPolygon Block Groups into distinct polygons
+# Break up MultiPolygon Voting Districts into distinct polygons
 for ii in list(range(nObjects)):
     p0 = va.at[ii,'geometry']
     if ( type(p0) == MultiPolygon ):
@@ -208,7 +235,8 @@ for ii in list(range(nObjects)):
             coords = list(pt.coords)
             va.at[nRec, 'INTPTLON10'] = coords[0][0]
             va.at[nRec, 'INTPTLAT10'] = coords[0][1]
-            va.at[nRec, 'POPULATION'] = 0
+            if jj != longest:
+                va.at[nRec, 'POPULATION'] = 0
             
 print( 'Rechecking polygons...' )
 for ndx in va.index:
@@ -220,10 +248,22 @@ for ndx in va.index:
 nObjects = len(va.index)
 print( 'We now have %d rows.' %nObjects )
 
+# Add PERIMETER column
 add_perimeter_column()
+
+# Show population
+total_pop = 0
+for ii in va.index:
+    total_pop += va.at[ii,'POPULATION']
+print ( 'TOTAL POPULATION: ' + str(total_pop) )
 
 fill_holes( va )
 
+# Verify population
+total_pop = 0
+for ii in va.index:
+    total_pop += va.at[ii,'POPULATION']
+print ( 'TOTAL POPULATION: ' + str(total_pop) )
 
 nObjects = len(va.index)
 print( 'We now have %d rows.' %nObjects )
@@ -231,12 +271,8 @@ print( 'We now have %d rows.' %nObjects )
 # See which ones still have holes
 for ii in va.index:
     nHoles = len(p0.interiors)
-    if nHoles > 0: print( 'BlockGroup %d still has %d holes.' %(ii, nHoles) )
+    if nHoles > 0: print( 'VTD %d still has %d holes.' %(ii, nHoles) )
 
-# Add PERIMETER column
-add_perimeter_column()
-
-# write_shapefile( va )
 
 print( 'va: ', len(va) )
 print( 'va.index: ', len(va.index) )
@@ -272,4 +308,3 @@ for ii in va.index:
 va['NEIGHBORS'] = neighbors
 write_shapefile( va )
 exit()
-

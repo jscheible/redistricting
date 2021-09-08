@@ -1,6 +1,6 @@
 import geopandas as gpd
 import matplotlib.pyplot as plt
-from BlockGroup import BlockGroup
+from VotingDistrict import VotingDistrict
 import statistics
 
 class District:
@@ -13,7 +13,7 @@ class District:
         District.count += 1
         self.population = 0
         self.perimeter = 0.0
-        self.block_groups = []
+        self.voting_districts = []
         self.neighboring_districts = []
         self.perimeter_up_to_date = True
         District.districts.append( self )
@@ -26,90 +26,90 @@ class District:
         return discontiguous
     
     def info():
-        block_groups = []
+        voting_districts = []
         populations = []
         perimeters = []
-        print( '----------------------------------------------------------------------------' )
-        print( '| District ID | Contiguous | # Block Groups | Population | Perimeter (km ) |' )
-        print( '----------------------------------------------------------------------------' )
+        print( '------------------------------------------------------------------------------' )
+        print( '| District ID | Contiguous | Voting Districts | Population | Perimeter (km ) |' )
+        print( '------------------------------------------------------------------------------' )
         for district in District.districts:
-            block_groups.append( district.numBlockGroups() )
+            voting_districts.append( district.numVotingDistricts() )
             populations.append( district.population )
             perimeters.append( district.getPerimeter()/1000.0 )
             
             if district.isContiguous():
-                print( '|     %2d      |      Y     |     %6d     | %9d  |  %9.0f      |'
-                       %( district.id, district.numBlockGroups(),
+                print( '|     %2d      |      Y     |      %6d      | %9d  |  %9.0f      |'
+                       %( district.id, district.numVotingDistricts(),
                           district.population, district.getPerimeter()/1000.0) )
             else:
-                print( '|     %2d      |      N     |     %6d     | %9d  |  %9.0f      |'
-                       %( district.id, district.numBlockGroups(),
+                print( '|     %2d      |      N     |      %6d      | %9d  |  %9.0f      |'
+                       %( district.id, district.numVotingDistricts(),
                           district.population, district.getPerimeter()/1000.0) )
-        print( '----------------------------------------------------------------------------' )
-        print( '|   Totals    |     N/A    |     %6d     | %9d  |  %9.0f      |'
-               %( sum(block_groups), sum(populations), sum(perimeters) ) )
-        print( '|   Min       |     N/A    |     %6d     | %9d  |  %9.0f      |'
-               %( min(block_groups), min(populations), min(perimeters) ) )
-        print( '|   Max       |     N/A    |     %6d     | %9d  |  %9.0f      |'
-               %( max(block_groups), max(populations), max(perimeters) ) )
-        print( '|   Mean      |     N/A    |     %6d     | %9d  |  %9.0f      |'
-               %( statistics.mean(block_groups), statistics.mean(populations), statistics.mean(perimeters) ) )
-        print( '|   StDev     |     N/A    |     %6d     | %9d  |  %9.0f      |'
-               %( statistics.stdev(block_groups), statistics.stdev(populations), statistics.stdev(perimeters) ) )
-        print( '----------------------------------------------------------------------------' )
+        print( '------------------------------------------------------------------------------' )
+        print( '|   Totals    |     N/A    |      %6d      | %9d  |  %9.0f      |'
+               %( sum(voting_districts), sum(populations), sum(perimeters) ) )
+        print( '|   Min       |     N/A    |      %6d      | %9d  |  %9.0f      |'
+               %( min(voting_districts), min(populations), min(perimeters) ) )
+        print( '|   Max       |     N/A    |      %6d      | %9d  |  %9.0f      |'
+               %( max(voting_districts), max(populations), max(perimeters) ) )
+        print( '|   Mean      |     N/A    |      %6d      | %9d  |  %9.0f      |'
+               %( statistics.mean(voting_districts), statistics.mean(populations), statistics.mean(perimeters) ) )
+        print( '|   StDev     |     N/A    |      %6d      | %9d  |  %9.0f      |'
+               %( statistics.stdev(voting_districts), statistics.stdev(populations), statistics.stdev(perimeters) ) )
+        print( '------------------------------------------------------------------------------' )
             
 
 
-    def addBlockGroup( self, block_group ):
-        assert( isinstance( block_group, BlockGroup ) )
-        cd = block_group.district
+    def addVotingDistrict( self, voting_district ):
+        assert( isinstance( voting_district, VotingDistrict ) )
+        cd = voting_district.district
         if cd != None:
-            District.districts[cd].delBlockGroup( block_group )
-        self.block_groups.append( block_group )
+            District.districts[cd].delVotingDistrict( voting_district )
+        self.voting_districts.append( voting_district )
         self.perimeter_up_to_date = False
-        self.population += block_group.population
-        District.population += block_group.population
-        block_group.district = self.id
+        self.population += voting_district.population
+        District.population += voting_district.population
+        voting_district.district = self.id
 
-    def delBlockGroup( self, block_group ):
-        assert( isinstance( block_group, BlockGroup ) )
+    def delVotingDistrict( self, voting_district ):
+        assert( isinstance( voting_district, VotingDistrict ) )
         try:
-            self.block_groups.remove( block_group )
-            block_group.district = None
+            self.voting_districts.remove( voting_district )
+            voting_district.district = None
             self.perimeter_up_to_date = False
-            self.population -= block_group.population
-            District.population -= block_group.population
+            self.population -= voting_district.population
+            District.population -= voting_district.population
         except ValueError:
             pass
 
     def getLargest():
         nLargest = 0
         for district in District.districts:
-            nBlockGroups = len(district.block_groups)
-            if nBlockGroups > nLargest:
-                nLargest = nBlockGroups
+            nVotingDistricts = len(district.voting_districts)
+            if nVotingDistricts > nLargest:
+                nLargest = nVotingDistricts
                 largest = district
         return largest, nLargest
 
-    def numBlockGroups( self ):
-        return len( self.block_groups )
+    def numVotingDistricts( self ):
+        return len( self.voting_districts )
 
     #-------------------------------------------------------------------------
     # Returns the length of the border between this list of block groups
     # and the specified district.
     #-------------------------------------------------------------------------
-    def getBorderWithDistrict( block_groups, district ):
+    def getBorderWithDistrict( voting_districts, district ):
         district_border_len = 0.0
         # Ensure uniqueness my making it a set:
-        block_group_set = set(block_groups)
-        for block_group in block_group_set:
-            for neighbor in block_group.neighbors:
+        voting_district_set = set(voting_districts)
+        for voting_district in voting_district_set:
+            for neighbor in voting_district.neighbors:
                 # Do not count neighbors that are also in this group
-                if neighbor.block_group in block_group_set:
+                if neighbor.voting_district in voting_district_set:
                     continue
 
                 # If districts match, add border with neighbor
-                if neighbor.block_group.district == district:
+                if neighbor.voting_district.district == district:
                     district_border_len += neighbor.border_len
                     
         return district_border_len
@@ -121,14 +121,14 @@ class District:
     def getPerimeter( self ):
         if ( self.perimeter_up_to_date ): return self.perimeter
         self.perimeter = 0.0
-        for block_group in self.block_groups:
+        for voting_district in self.voting_districts:
             # Add perimeter of block group to perimeter of district
-            self.perimeter += block_group.perimeter
+            self.perimeter += voting_district.perimeter
 
             # Loop over neighboring block groups
-            for neighbor in block_group.neighbors:
+            for neighbor in voting_district.neighbors:
                 # If neighbor is in the same district, subtract border length
-                if ( neighbor.block_group.district == block_group.district ):
+                if ( neighbor.voting_district.district == voting_district.district ):
                     self.perimeter -= neighbor.border_len
         self.perimeter_up_to_date = True
         return self.perimeter
@@ -151,8 +151,8 @@ class District:
         data = gpd.read_file( "jax_tl_2010_51_bg10.shp" )
         # Add district columns
         cong_dist = []
-        for block_group in BlockGroup.block_groups:
-            cong_dist.append( block_group.district )
+        for voting_district in VotingDistrict.voting_districts:
+            cong_dist.append( voting_district.district )
 
         data['CongDist'] = cong_dist
         print( data.head() )
@@ -164,24 +164,24 @@ class District:
         block_ids = []
         if type(block) == int:
             block_ids.append( block )
-        elif type(block) == BlockGroup:
+        elif type(block) == VotingDistrict:
             block_ids.append( block.id )
         elif type(block) == list or type(block) == set:
             for item in block:
                 if type(item) == int:
                     block_ids.append( item )
-                elif type(item) == BlockGroup:
+                elif type(item) == VotingDistrict:
                     block_ids.append( item.id )
 
         print( 'Showing blocks: ', block_ids )
-        data = gpd.read_file( "jax_tl_2010_51_bg10.shp" )
+        data = gpd.read_file( "jax_tl_2020_51_vtd20.shp" )
         # Add district columns
         cong_dist = []
-        for block_group in BlockGroup.block_groups:
-            if block_group.id in block_ids:
+        for voting_district in VotingDistrict.voting_districts:
+            if voting_district.id in block_ids:
                 cong_dist.append( 2 )
             else:
-                if block_group.district == district_id:
+                if voting_district.district == district_id:
                     cong_dist.append( 0 )
                 else:
                     cong_dist.append( 1 )
@@ -206,56 +206,56 @@ class District:
     # Returns whether a block group is contiguous.
     #------------------------------------------------------------------
     def isContiguous( self ):
-        if len( self.block_groups ) == 0: return True
+        if len( self.voting_districts ) == 0: return True
         
-        block_groups = []
+        voting_districts = []
         nCurrent = 0
-        start = self.block_groups[0]
-        block_groups.append( start )
-        nNew = len( block_groups )
+        start = self.voting_districts[0]
+        voting_districts.append( start )
+        nNew = len( voting_districts )
         while ( nNew > nCurrent ):
             nCurrent = nNew
-            for block_group in block_groups:
-                for neighbor in block_group.neighbors:
-                    if ( neighbor.block_group.district == self.id ):
-                        if ( neighbor.block_group not in block_groups ):
-                            block_groups.append( neighbor.block_group )
-            nNew = len( block_groups )
-        assert( nCurrent <= len( self.block_groups ))
-        if nCurrent == len( self.block_groups ):
+            for voting_district in voting_districts:
+                for neighbor in voting_district.neighbors:
+                    if ( neighbor.voting_district.district == self.id ):
+                        if ( neighbor.voting_district not in voting_districts ):
+                            voting_districts.append( neighbor.voting_district )
+            nNew = len( voting_districts )
+        assert( nCurrent <= len( self.voting_districts ))
+        if nCurrent == len( self.voting_districts ):
             return True
         else:
-            # print( 'Only %d of %d block groups counted' %(nCurrent,len( self.block_groups ) ) )
+            # print( 'Only %d of %d block groups counted' %(nCurrent,len( self.voting_districts ) ) )
             return False
 
-    def getBorderLength( self, block_group ):
+    def getBorderLength( self, voting_district ):
         border_len = 0.0
-        for neighbor in block_group.neighbors:
-            if neighbor.block_group.district == block_group.district:
+        for neighbor in voting_district.neighbors:
+            if neighbor.voting_district.district == voting_district.district:
                 border_len += neighbor.border_len
         return border_len
         
     #------------------------------------------------------------------
     # Returns list of districts that border this block group.
     #------------------------------------------------------------------
-    def getNeighboringDistricts( block_group ):
+    def getNeighboringDistricts( voting_district ):
         neighboring_districts = []
-        for neighbor in block_group.neighbors:
-            if neighbor.block_group.district not in neighboring_districts:
-                neighboring_districts.append( neighbor.block_group.district )
+        for neighbor in voting_district.neighbors:
+            if neighbor.voting_district.district not in neighboring_districts:
+                neighboring_districts.append( neighbor.voting_district.district )
 
         try:
-            neighboring_districts.remove( block_group.district )
+            neighboring_districts.remove( voting_district.district )
         except ValueError:
             # This should not happen, but we can correct it by adding this
             # block group to the neighboring district with the longest border
             best_fit = District.districts[neighboring_districts[0]]
-            longest = best_fit.getBorderLength( block_group )
+            longest = best_fit.getBorderLength( voting_district )
             for district_id in neighboring_districts[1:]:
                 district = District.districts[district_id]
-                if district.getBorderLength( block_group ) > longest:
+                if district.getBorderLength( voting_district ) > longest:
                     best_fit = district
-            best_fit.addBlockGroup( block_group )
+            best_fit.addVotingDistrict( voting_district )
             
         return neighboring_districts
         
@@ -264,9 +264,9 @@ class District:
     #------------------------------------------------------------------
     def getBorderBlocks( self ):
         border_set = set()
-        for block_group in self.block_groups:
-            for neighboring_district_id in District.getNeighboringDistricts( block_group ):
-                border_set.add( (block_group,neighboring_district_id) )
+        for voting_district in self.voting_districts:
+            for neighboring_district_id in District.getNeighboringDistricts( voting_district ):
+                border_set.add( (voting_district,neighboring_district_id) )
         return border_set
 
     #----------------------------------------------------------------------------
@@ -274,20 +274,20 @@ class District:
     # to the one specified without increasing the population disparity and
     # without making its current district discontiguous.
     #----------------------------------------------------------------------------
-    def isValidCandidate( self, block_group, neighboring_district_id ):
-        this_district = District.districts[block_group.district]
+    def isValidCandidate( self, voting_district, neighboring_district_id ):
+        this_district = District.districts[voting_district.district]
         neighboring_district = District.districts[neighboring_district_id]
 
         # Cannot move a block to the district it's already in.
-        if block_group.district == neighboring_district_id:
+        if voting_district.district == neighboring_district_id:
             return False
 
         # Cannot move a block that does not belong to this distict
-        if block_group.district != self.id:
+        if voting_district.district != self.id:
             return False
 
         # Cannot move a block to a district it does not border
-        neighboring_districts = District.getNeighboringDistricts( block_group )
+        neighboring_districts = District.getNeighboringDistricts( voting_district )
 
         return ( neighboring_district_id in neighboring_districts )
         
@@ -296,17 +296,17 @@ class District:
     # and its border with neighboring district.
     # A border rati of 0.0 means that the two do not share a border.
     #----------------------------------------------------------------
-    def getBorderRatio( block_group, district_id ):
+    def getBorderRatio( voting_district, district_id ):
 
-        if block_group.district == district_id:
+        if voting_district.district == district_id:
             return 0.0
         
         current_district_border = 0.0
         neighboring_district_border = 0.0
-        for neighbor in block_group.neighbors:
-            if neighbor.block_group.district == block_group.district:
+        for neighbor in voting_district.neighbors:
+            if neighbor.voting_district.district == voting_district.district:
                 current_district_border += neighbor.border_len
-            elif neighbor.block_group.district == district_id:
+            elif neighbor.voting_district.district == district_id:
                 neighboring_district_border += neighbor.border_len
 
         return (neighboring_district_border / current_district_border)
@@ -435,7 +435,7 @@ class District:
                 # Continue until there are no more to move
                 while move_me != None:
 
-                    block_group = move_me[0]
+                    voting_district = move_me[0]
                     neighboring_district = District.districts[move_me[1]]
                     try:
                         border_ratio = candidates.pop( move_me )
@@ -456,8 +456,8 @@ class District:
 
                     # Move block group to new district
                     print( 'Moving block group %4d from %2d to %2d'
-                           %( block_group.id, block_group.district, neighboring_district.id ) )
-                    neighboring_district.addBlockGroup( block_group )
+                           %( voting_district.id, voting_district.district, neighboring_district.id ) )
+                    neighboring_district.addVotingDistrict( voting_district )
                     numTransferred += 1
 
                     # Recompute metrics.
@@ -469,8 +469,8 @@ class District:
 
                     # If we have exceeded tolerance, return block
                     if ( metric > tolerance ):
-                        print( 'Returning block group %4d' %block_group.id )
-                        district.addBlockGroup( block_group )
+                        print( 'Returning block group %4d' %voting_district.id )
+                        district.addVotingDistrict( voting_district )
                         numTransferred -= 1
                         continue
                     
@@ -482,12 +482,12 @@ class District:
                     # Now need to recheck the neighboring block groups.
                     # Remove them from the candidates list.  Don't re-add.
                     # Only doing one pass per district before moving on.
-                    for neighbor in block_group.neighbors:
-                        if neighbor.block_group not in district.block_groups:
+                    for neighbor in voting_district.neighbors:
+                        if neighbor.voting_district not in district.voting_districts:
                             continue
 
                         try:
-                            candidates.pop( (neighbor.block_group, neighboring_district.id) )
+                            candidates.pop( (neighbor.voting_district, neighboring_district.id) )
                         except KeyError:
                             pass
 
@@ -557,7 +557,7 @@ class District:
                 # Continue until there are no more to move
                 while move_me != None:
 
-                    block_group = move_me[0]
+                    voting_district = move_me[0]
                     neighboring_district = District.districts[move_me[1]]
                     try:
                         border_ratio = candidates.pop( move_me )
@@ -574,37 +574,37 @@ class District:
 
                     # Check population difference between districts.
                     pop_diff = district.population - neighboring_district.population
-                    if pop_diff < block_group.population:
+                    if pop_diff < voting_district.population:
                         move_me = District.getBestCandidate( candidates )
                         continue
         
                     # Move block group to new district
                     print( 'Moving block group %4d from %2d to %2d'
-                           %( block_group.id, block_group.district, neighboring_district.id ) )
-                    neighboring_district.addBlockGroup( block_group )
+                           %( voting_district.id, voting_district.district, neighboring_district.id ) )
+                    neighboring_district.addVotingDistrict( voting_district )
                     numTransferred += 1
 
                     # We now need to recheck the neighboring block groups
                     # Remove them from the candidates list, and re-add
-                    for neighbor in block_group.neighbors:
-                        if neighbor.block_group not in district.block_groups:
+                    for neighbor in voting_district.neighbors:
+                        if neighbor.voting_district not in district.voting_districts:
                             continue
 
                         try:
-                            candidates.pop( (neighbor.block_group, neighboring_district.id) )
+                            candidates.pop( (neighbor.voting_district, neighboring_district.id) )
                         except KeyError:
                             pass
 
-                        for tmp in District.getNeighboringDistricts( neighbor.block_group ):
+                        for tmp in District.getNeighboringDistricts( neighbor.voting_district ):
                             # If neighbor not a valid candidate to move to
                             # the tmp district, continue looping
-                            if not district.isValidCandidate( neighbor.block_group, tmp ): continue
+                            if not district.isValidCandidate( neighbor.voting_district, tmp ): continue
 
                             # Get border ratio
-                            border_ratio = District.getBorderRatio( neighbor.block_group, tmp )
+                            border_ratio = District.getBorderRatio( neighbor.voting_district, tmp )
 
                             # Save this information in dictionary of candidates
-                            candidates.update( {(neighbor.block_group,tmp): border_ratio} )
+                            candidates.update( {(neighbor.voting_district,tmp): border_ratio} )
 
                     # Get best block group to move
                     move_me = District.getBestCandidate( candidates )
@@ -641,8 +641,8 @@ class District:
         for neighbor in candidate.neighbors:
 
             # print( neighbor )
-            neighbor_id = neighbor.block_group.id
-            neighbor_district_id = neighbor.block_group.district
+            neighbor_id = neighbor.voting_district.id
+            neighbor_district_id = neighbor.voting_district.district
 
             # Skip blocks that are in the same district
             if neighbor_district_id == self.id: continue
@@ -686,7 +686,7 @@ class District:
             # districts, and gain this block group's borders with itself.
             dPerimSelf = 0.0
             for tmp in candidate.neighbors:
-                if self.id != tmp.block_group.district:
+                if self.id != tmp.voting_district.district:
                     dPerimSelf -= tmp.border_len
                 else:
                     dPerimSelf += tmp.border_len
@@ -695,7 +695,7 @@ class District:
             # other districts, and lose this block group's borders with itself.
             dPerimNeighbor = 0.0
             for tmp in candidate.neighbors:
-                if neighbor_district.id != tmp.block_group.district:
+                if neighbor_district.id != tmp.voting_district.district:
                     dPerimNeighbor += tmp.border_len
                 else:
                     dPerimNeighbor -= tmp.border_len
@@ -719,7 +719,7 @@ class District:
         candidates = []
         neighboring_districts = []
         print( 'Getting candidate block groups to transfer out of %d' %self.id )
-        for candidate in self.block_groups:
+        for candidate in self.voting_districts:
 
             for info in self.neighboringDistricts( candidate ):
                 if info not in candidates:
@@ -736,10 +736,10 @@ class District:
             if len(discontiguous) > 0:
                 District.info()
                 if last_transferred != None:
-                    block_group = last_transferred[0]
+                    voting_district = last_transferred[0]
                     neighboring_district = last_transferred[1]
                     print( 'Last: Block Group %d transferred from district %d to %d.'
-                           %( block_group.id, self.id, neighboring_district.id ) )
+                           %( voting_district.id, self.id, neighboring_district.id ) )
                     for dist in discontiguous:
                         District.showDistrictAndBlock( dist, last_transferred[0].id )
                 exit()
@@ -768,12 +768,12 @@ class District:
                 continue
                 
             # Transfer best candidate
-            neighbor_district.addBlockGroup( best[0] )
+            neighbor_district.addVotingDistrict( best[0] )
             
             # Ensure all districts are still contiguous
             discontiguous = District.getDiscontiguous()
             if len(discontiguous) > 0:
-                self.addBlockGroup( best[0] )
+                self.addVotingDistrict( best[0] )
                 for iDisc in list(range(len(discontiguous))):
                     print( 'Removing block group %d from District %d made district %d discontiguous'
                            %(best[0].id, self.id, discontiguous[iDisc] ) )
@@ -782,11 +782,11 @@ class District:
                 discontiguous = District.getDiscontiguous()
                 if len(discontiguous) > 0:
                     District.info()
-                    block_group = best[0]
+                    voting_district = best[0]
                     neighboring_district = best[1]
                     for iDisc in list(range(len(discontiguous))):
                         print( 'Last: Block Group %d transferred from district %d to %d.'
-                               %( block_group.id, self.id, neighboring_district.id ) )
+                               %( voting_district.id, self.id, neighboring_district.id ) )
                         print( '      Replacing it did not fix problem.' )
                         for dist in discontiguous:
                             District.showDistrictAndBlock( dist, best[0].id )
@@ -805,8 +805,8 @@ class District:
                     if tmp[0] == neighbor:
                         candidates.remove(tmp)
                         
-                if neighbor.block_group.district == self.id:
-                    for info in self.neighboringDistricts( neighbor.block_group ):
+                if neighbor.voting_district.district == self.id:
+                    for info in self.neighboringDistricts( neighbor.voting_district ):
                         print( 'Adding candidate: %4d, district %2d' %(info[0].id, info[1].id) )
                         candidates.append( info )
             
@@ -823,31 +823,31 @@ class District:
     #------------------------------------------------------------------
     def getIslands( self ):
         print( 'Getting islands for district %d' %self.id )
-        block_groups = set( self.block_groups )
+        voting_districts = set( self.voting_districts )
         islands = []
-        while len(block_groups) > 0:
-            print( 'block groups remaining: %d' %len(block_groups) )
+        while len(voting_districts) > 0:
+            print( 'block groups remaining: %d' %len(voting_districts) )
             island = []
             population = 0
-            start = block_groups.pop()
+            start = voting_districts.pop()
             island.append( start )
             new_pop = start.population
             while new_pop != 0:
                 new_pop = 0
                 # Loop thru block groups currently in this island
                 for ndx in list(range(len(island))):
-                    block_group = island[ndx]
+                    voting_district = island[ndx]
                     
                     # Loop thru block groups nieghbors
-                    for neighbor in block_group.neighbors:
+                    for neighbor in voting_district.neighbors:
                         # If neighbor is in the same district
-                        if ( neighbor.block_group.district == self.id ):
+                        if ( neighbor.voting_district.district == self.id ):
                             # add neighbor to island
-                            if neighbor.block_group not in island:
-                                island.append( neighbor.block_group )
-                                new_pop += neighbor.block_group.population
-                            # remove neighbor from block_groups
-                            block_groups.discard( neighbor.block_group )
+                            if neighbor.voting_district not in island:
+                                island.append( neighbor.voting_district )
+                                new_pop += neighbor.voting_district.population
+                            # remove neighbor from voting_districts
+                            voting_districts.discard( neighbor.voting_district )
 
                 # Add new population to total island population
                 population += new_pop
@@ -880,27 +880,27 @@ class District:
                 print( len(island[0]), ' block groups left to move' ) 
                 tmp.clear()
                 # Get the first block group
-                for block_group in island[0]:
-                    old_district_id = block_group.district
+                for voting_district in island[0]:
+                    old_district_id = voting_district.district
                     if old_district_id != self.id: continue
                     
                     print( 'This district: %d' %self.id )
                     print( 'Trying to relocate block group %d from %d.'
-                           % (block_group.id,block_group.district) )
-                    for neighbor in block_group.neighbors:
+                           % (voting_district.id,voting_district.district) )
+                    for neighbor in voting_district.neighbors:
                         print( '  Neighbor %d is in %d.'
-                               % (neighbor.block_group.id,neighbor.block_group.district) )
+                               % (neighbor.voting_district.id,neighbor.voting_district.district) )
                         
-                        if neighbor.block_group.district != old_district_id:
-                            new_district_id = neighbor.block_group.district
+                        if neighbor.voting_district.district != old_district_id:
+                            new_district_id = neighbor.voting_district.district
                             new_district = District.districts[new_district_id]
-                            new_district.addBlockGroup( block_group )
+                            new_district.addVotingDistrict( voting_district )
                             print( 'Moving %d from %d to %d'
-                                   %(block_group.id,old_district_id,new_district_id) )
+                                   %(voting_district.id,old_district_id,new_district_id) )
                             break
                     if count > 10: continue
-                    if block_group.district == old_district_id:
-                        tmp.append( block_group )
+                    if voting_district.district == old_district_id:
+                        tmp.append( voting_district )
                         
                 island[0].clear()
                 for bg in tmp: island[0].append( bg )
