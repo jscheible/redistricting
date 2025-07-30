@@ -1,4 +1,3 @@
-#!/bin/python3 -ddd
 import censusdata
 import math
 import ast
@@ -11,6 +10,7 @@ import geopandas as gpd
 import earthpy
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+import sys, getopt
 from VotingDistrict import VotingDistrict
 from District import District
 
@@ -26,7 +26,7 @@ def buildDistricts():
     # Create new District objects
     for ii in list(range(nDistricts)):
         district = District()
-         
+
     # Assign first VTD to each district
     for district in District.districts:
         startingVotingDistrict = district.id * avgVotingDistricts
@@ -36,15 +36,15 @@ def buildDistricts():
     # While there are unassigned block groups
     while( VotingDistrict.getNumUnassigned() > 0 ):
         print( 'There are %d unassigned block groups' %VotingDistrict.getNumUnassigned() )
-        
+
         # Loop over districts, adding one layer of block groups at a time
         for district in District.districts:
-            
+
             # Loop over block groups currently in district
             nVotingDistricts = len(district.voting_districts)
             for ii in list(range(nVotingDistricts)):
                 voting_district = district.voting_districts[ii]
-                
+
                 # Loop over neighboring block groups
                 for neighbor in voting_district.neighbors:
                     # If neighboring block group is not used...
@@ -53,31 +53,31 @@ def buildDistricts():
 
 
 def assignUnassignedVotingDistricts():
-    # Count unassigned block groups
+    # Count unassigned voting districts
     nUnassigned = 0
     for voting_district in voting_districts:
         if ( voting_district.district == None ): nUnassigned += 1
 
     while ( nUnassigned > 0 ):
-        # Reset number of unassigned block groups
+        # Reset number of unassigned voting districts
         nUnassigned = 0
-        
-        # Loop through block groups
+
+        # Loop through voting districts
         for voting_district in voting_districts:
-            # If block group is unassigned...
+            # If voting district is unassigned...
             if ( voting_district.district == None ):
-                # Increment count of unassigned block groups
+                # Increment count of unassigned voting districts
                 nUnassigned += 1
 
-                # Loop over adjacent block groups
+                # Loop over adjacent voting districts
                 for neighbor in voting_district.neighbors:
-                    # If bordering block group is assigned...
+                    # If bordering voting district is assigned...
                     assignedTo = neighbor.voting_district.district
                     if ( assignedTo != None ):
-                        # Assign this block group to same district as neighbor
+                        # Assign this voting district to same district as neighbor
                         districts[assignedTo].addVotingDistrict( voting_district )
 
-                        # Decrement number of unassigned block groups
+                        # Decrement number of unassigned voting districts
                         nUnassigned -= 1
 
                         # Exit loop over neighbors
@@ -88,15 +88,15 @@ def equalizePerimeters():
     district_perimeters = []
     metric = District.getMetric()
     print( "Metric: %.4f" %metric )
-    
+
     while( numTransferred != 0 and metric > 0.2 ):
         # Reset numTransferred
         numTransferred = 0
 
-        # Loop over all block groups
+        # Loop over all voting districts
         for voting_district in voting_districts:
             this_district = District.districts[voting_district.district]
-            
+
             # Loop over neighbors
             for neighbor in voting_district.neighbors:
                 neighbor_district = District.districts[neighbor.voting_district.district]
@@ -104,7 +104,7 @@ def equalizePerimeters():
 
                 # Get current metric
                 current_metric = District.getMetric()
-                
+
                 # move neighbor to this distric
                 neighbor_district.delVotingDistrict( neighbor.voting_district )
                 this_district.addVotingDistrict( neighbor.voting_district )
@@ -112,18 +112,18 @@ def equalizePerimeters():
 
                 # recompute metric
                 new_metric = District.getMetric()
-                
+
                 # If new metric is not better than the old...
                 if ( new_metric >= current_metric ):
-                    # move block group back to this district
+                    # move voting district back to this district
                     this_district.delVotingDistrict( neighbor.voting_district )
                     neighbor_district.addVotingDistrict( neighbor.voting_district )
                     numTransferred -= 1
-                        
+
         metric = District.getMetric()
         print( "Metric: %.4f" %metric )
 
-                
+
 def minimizeTotalPerimeter():
     numTransferred = -1
     district_perimeters = []
@@ -131,7 +131,7 @@ def minimizeTotalPerimeter():
     for district in District.districts:
         district_perimeters.append( district.getPerimeter() )
     totalPerimeter = sum( district_perimeters ) / 1000.0
-        
+
     while( numTransferred != 0 ):
         # Print status
         print( 'NumTransferred: %d' %numTransferred )
@@ -140,10 +140,10 @@ def minimizeTotalPerimeter():
         # Reset numTransferred
         numTransferred = 0
 
-        # Loop over all block groups
+        # Loop over all voting districts
         for voting_district in VotingDistrict.voting_districts:
             this_district = District.districts[voting_district.district]
-            
+
             # Loop over neighbors
             for neighbor in voting_district.neighbors:
                neighbor_district = District.districts[neighbor.voting_district.district]
@@ -165,7 +165,7 @@ def minimizeTotalPerimeter():
 
                # If new perimeters larger than old...
                if ( new_sum >= original_sum ):
-                   # move block group back to this district
+                   # move voting district back to this district
                    neighbor_district.addVotingDistrict( neighbor.voting_district )
                    numTransferred -= 1
 
@@ -179,7 +179,7 @@ def plotDistricts():
     cong_dist = []
     for voting_district in VotingDistrict.voting_districts:
         cong_dist.append( voting_district.district )
-            
+
     data['CongDist'] = cong_dist
     print( data.head() )
 
@@ -189,7 +189,7 @@ def plotDistricts():
 def findWorstProtrusion():
     worst_ratio = 0.0
     border_lengths = [0.0] * nDistricts
-    # Find a block group that is a border district,
+    # Find a voting district that is a border district,
     neighboring_districts = set()
     for voting_district in VotingDistrict.voting_districts:
         # Collect all neighboring districts
@@ -197,7 +197,7 @@ def findWorstProtrusion():
         for neighbor in voting_district.neighbors:
             neighboring_districts.add( neighbor.voting_district.district )
 
-        # If this block group has only one neighboring district (its own),
+        # If this voting district has only one neighboring district (its own),
         # it is not a border group.
         if len( neighboring_districts ) == 1:
             continue
@@ -240,13 +240,60 @@ def findWorstProtrusion():
                 worst_protrusion = plot_these
                 worst_district = voting_district.district
                 move_to_district = best_district
-                
-    print ( 'Block Group: %4d' %voting_district.id )
+
+    print ( 'Voting District: %4d' %voting_district.id )
     # print( worst_protrusion )
     print( '    Border Ratio: %.2f' %worst_ratio )
-    District.showDistrictAndBlock( worst_district, worst_protrusion )
+    # District.showDistrictAndBlock( worst_district, worst_protrusion )
 
     return worst_protrusion, worst_ratio, move_to_district
+
+# ---------------------------------------------------------------------
+#  PARSE_COMMAND_LINE()
+# ---------------------------------------------------------------------
+def parse_command_line():
+    # Define global variables
+    global shape_file
+    global nDistricts
+    # tolerance is the largest permissible value
+    # for population diff/avg
+    global tolerance
+
+    # Set default for tolerance
+    tolerance = 0.05
+
+    # Remove 1st argument from the
+    # list of command line arguments
+    argumentList = sys.argv[1:]
+
+    # Options
+    options = "hs:n:t:"
+
+    # Long options
+    long_options = [ "help", "shape-file=", "num-districts=", "tolerace=" ]
+
+    try:
+        # Parsing argument
+        arguments, values = getopt.getopt(argumentList, options, long_options)
+
+        # checking each argument
+        for currentArgument, currentValue in arguments:
+
+            if currentArgument in ("-h", "--help"):
+                print ( "Displaying Help" )
+
+            elif currentArgument in ("-s", "--shape-file"):
+                shape_file = currentValue
+
+            elif currentArgument in ("-n", "--num-districts"):
+                nDistricts = int(currentValue)
+
+            elif currentArgument in ("-t", "--tolerance"):
+                tolerance = float(currentValue)
+
+    except getopt.error as err:
+        # output error, and return with an error code
+        print (str(err))
 
 # ---------------------------------------------------------------------
 #  START HERE
@@ -255,31 +302,33 @@ def findWorstProtrusion():
 RE = 6.371e6       # radius of the earth in meters
 CE = 2*math.pi*RE  # Circumference of the earth in meters
 
-# There are 11 Congressional districts in VA
-nDistricts = 11
-
-# tolerance is the largest permissible value
-# for population diff/avg
-tolerance = 0.05
+# Parse Command Line
+parse_command_line()
 
 # Read data file
-data = gpd.read_file( "jax_tl_2020_51_vtd20.shp" )
+data = gpd.read_file( shape_file )
 
 # Create VotingDistricts from data
 for ndx in data.index:
-    bg = VotingDistrict()
-    bg.population = data.at[ndx,'POPULATION']
-    bg.perimeter = data.at[ndx,'PERIMETER']
+    vd = VotingDistrict()
+    vd.population = data.at[ndx,'POPULATION']
+    vd.perimeter = data.at[ndx,'PERIMETER']
+    try:
+        vd.democrat   = data.at[ndx,'DEMOCRAT']
+        vd.republican = data.at[ndx,'REPUBLICAN']
+    except:
+        vd.democrat   = 0
+        vd.republican = 0
 
-# Add neighbors to block groups
+# Add neighbors to voting districts
 for ndx in data.index:
-    bg = VotingDistrict.voting_districts[ndx]
+    vd = VotingDistrict.voting_districts[ndx]
     neighbors = ast.literal_eval( data.at[ndx,'NEIGHBORS'] )
-    for bg_num, border_len in neighbors:
-        bg.neighbors.append( Neighbor(VotingDistrict.voting_districts[bg_num], border_len) )
-        VotingDistrict.voting_districts[bg_num].neighbors.append( Neighbor(bg, border_len) )
-        
-# Average number of block groups per district
+    for vd_num, border_len in neighbors:
+        vd.neighbors.append( Neighbor(VotingDistrict.voting_districts[vd_num], border_len) )
+        VotingDistrict.voting_districts[vd_num].neighbors.append( Neighbor(vd, border_len) )
+
+# Average number of voting districts per district
 avgVotingDistricts = math.floor( VotingDistrict.getVotingDistrictCount() / nDistricts )
 
 print( 'avgVotingDistricts: ', avgVotingDistricts )
@@ -288,7 +337,7 @@ print( 'avgVotingDistricts: ', avgVotingDistricts )
 buildDistricts()
 print( 'First Build:' )
 District.info()
-plotDistricts()
+# plotDistricts()
 
 # Progressively make things better
 # Try to equalize populations
@@ -300,7 +349,10 @@ District.info()
 plotDistricts()
 
 worst_ratio = 100.0
-while worst_ratio > 3.0:
+count = 0
+max_count = 100
+while worst_ratio > 3.0 and count < max_count:
+    max_count += 1
     worst_protrusion, worst_ratio, move_to_district = findWorstProtrusion()
     print( 'Worst Ratio: %4d' %worst_ratio )
     for voting_district in worst_protrusion:
@@ -308,11 +360,12 @@ while worst_ratio > 3.0:
     # Try to equalize populations
     District.balancePopulations( tolerance/2.0 )
     District.minimizeTotalPerimeter( tolerance )
-    District.info()
-    plotDistricts()
+    # District.info()
+    # plotDistricts()
 
 print( 'Final Build:' )
 District.info()
+District.voting()
 plotDistricts()
 
 exit()
