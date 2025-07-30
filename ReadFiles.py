@@ -1,5 +1,4 @@
-#!/bin/python3
-from shapely.geometry import Point, Polygon, MultiPolygon, shape, mapping, MultiLineString, LineString
+from shapely.geometry import Point, Polygon, MultiPolygon, MultiLineString, LineString, shape, mapping
 from collections import OrderedDict
 import ast
 import numpy
@@ -10,7 +9,7 @@ import statistics
 import csv
 from tabulate import tabulate
 import plotly.figure_factory as ff
-import sys
+import sys, getopt
 from copy import copy
 import tkinter
 import geopandas as gpd
@@ -32,59 +31,155 @@ def ll_to_m( point ):
     return ( m_lon, m_lat )
 
 # ---------------------------------------------------------------------
+#  PARSE_COMMAND_LINE()
+# ---------------------------------------------------------------------
+def parse_command_line():
+    # Define global variables
+    global shape_file
+    global output_file
+    global num_districts
+    global population_file
+    global votes_file
+
+    # Remove 1st argument from the
+    # list of command line arguments
+    argumentList = sys.argv[1:]
+
+    # Options
+    options = "hv:s:p:o:"
+
+    # Long options
+    long_options = ["help", "votes-file=", "shape-file=", "population-file=", "output="]
+
+    try:
+        # Parsing argument
+        arguments, values = getopt.getopt(argumentList, options, long_options)
+
+        # checking each argument
+        for currentArgument, currentValue in arguments:
+
+            if currentArgument in ("-h", "--help"):
+                print ( "Displaying Help" )
+
+            elif currentArgument in ("-s", "--shape-file"):
+                shape_file = currentValue
+
+            elif currentArgument in ("-p", "--population-file"):
+                population_file = currentValue
+
+            elif currentArgument in ("-o", "--output"):
+                output_file = currentValue
+
+            elif currentArgument in ("-v", "--votes-file"):
+                votes_file = currentValue
+
+    except getopt.error as err:
+        # output error, and return with an error code
+        print (str(err))
+
+# ---------------------------------------------------------------------
 #  ADD_POPULATION_COLUMN()
 # ---------------------------------------------------------------------
 def add_population_column():
     total_population = 0
-    
-    # Pull GEOIDs and Population from geodata file
-    with open ( '../census/2020/Virginia/vageo2020.pl', 'r' ) as f:
-        geo_geoid   = [ row[8] for row in csv.reader(f,delimiter='|')]
 
-    with open ( '../census/2020/Virginia/vageo2020.pl', 'r' ) as f:
+    # Pull GEOIDs and Population from geodata file
+    print( "Population file: ", population_file )
+    with open ( population_file, 'r', encoding = "ISO-8859-1" ) as f:
+        geo_geoid = [ row[8] for row in csv.reader(f,delimiter='|')]
+
+    with open ( population_file, 'r', encoding = "ISO-8859-1" ) as f:
         geo_pop = [ row[90] for row in csv.reader(f,delimiter='|')]
 
-    # Add VTD column to va
-    va['VTD'] = [ ii for ii in list(range(len(va.index))) ]
+    # Add VTD column to vtd
+    vtd['VTD'] = [ ii for ii in list(range(len(vtd.index))) ]
 
-    # Add population column to va
-    va['POPULATION'] = [ 0 ] * len(va.index)
+    # Add population column to vtd
+    vtd['POPULATION'] = [ 0 ] * len(vtd.index)
 
     # Loop over shapes and get population
-    for ii in va.index:
+    for ii in vtd.index:
         try:
-            # Get logical record number from geodata
-            geoid20 = va.at[ii,'GEOID20']
+            # Get record number from geodata
+            geoid20 = vtd.at[ii,'GEOID20']
             ndx = '7000000US' + geoid20
             print ( 'NDX: ' + ndx )
             recno = geo_geoid.index(ndx)
             print ( 'RECNO: ' + str(recno) )
 
-            print ( 'POP: ' + geo_pop[recno] )
             # Get population with logical record number
-            va.at[ii,'POPULATION'] = geo_pop[recno]
-                                              
-        except ValueError:
-            va.at[ii,'POPULATION'] = 0
+            print ( 'POP: ' + geo_pop[recno] )
+            vtd.at[ii,'POPULATION'] = int( geo_pop[recno] )
 
-        total_population += va.at[ii,'POPULATION']
+        except ValueError:
+            vtd.at[ii,'POPULATION'] = 0
+
+        print( "Line: ", ii, "  Population: ", vtd.at[ii,'POPULATION'] )
+        total_population += vtd.at[ii,'POPULATION']
 
     print( 'TOTAL POPULATION: ' + str(total_population) )
-    
+
+# ---------------------------------------------------------------------
+#  ADD_VOTE_COLUMNS()
+# ---------------------------------------------------------------------
+def add_vote_columns():
+    # Add columns to vtd
+    vtd['DEMOCRAT'] = [ 0 ] * len(vtd.index)
+    vtd['REPUBLICAN'] = [ 0 ] * len(vtd.index)
+
+    # Pull GEOIDs and Votes from geodata file
+    try:
+        print( "Votes file: ", votes_file )
+    except NameError:
+        return()
+
+    geo_geoid = []
+    geo_dem = []
+    geo_rep = []
+    with open ( votes_file, 'r', encoding = "ISO-8859-1" ) as f:
+        for row in csv.reader(f,delimiter=','):
+            print( row[0], row[1], row[2] )
+            geo_geoid.append( row[0] )
+            geo_dem.append( row[1] )
+            geo_rep.append( row[2] )
+
+    # Add columns to vtd
+    vtd['DEMOCRAT'] = [ 0 ] * len(vtd.index)
+    vtd['REPUBLICAN'] = [ 0 ] * len(vtd.index)
+
+    # Loop over shapes and get population
+    for ii in vtd.index:
+        try:
+            # Get record number from geodata
+            ndx = vtd.at[ii,'GEOID20']
+            print ( 'NDX: ' + ndx )
+            recno = geo_geoid.index(ndx)
+            print ( 'RECNO: ' + str(recno) )
+
+            # Get values with logical record number
+            print ( 'DEM: ' + geo_dem[recno] )
+            vtd.at[ii,'DEMOCRAT'] = int( geo_dem[recno] )
+            print ( 'REP: ' + geo_rep[recno] )
+            vtd.at[ii,'REPUBLICAN'] = int( geo_rep[recno] )
+
+        except ValueError:
+            vtd.at[ii,'DEMOCRAT'] = 0
+            vtd.at[ii,'REPUBLICAN'] = 0
+
 # ---------------------------------------------------------------------
 #  ADD_PERIMETER_COLUMN()
 # ---------------------------------------------------------------------
 def add_perimeter_column():
-    va['PERIMETER'] = [ 0.0 ] * len(va.index)
-    for ii in va.index:
-        p0 = va.at[ii,'geometry']
+    vtd['PERIMETER'] = [ 0.0 ] * len(vtd.index)
+    for ii in vtd.index:
+        p0 = vtd.at[ii,'geometry']
         perimeter = p0.exterior
         perimeter = p0.exterior.coords
         new_points = []
         for point in perimeter:
             new_points.append( ll_to_m( point ) )
         new_perim = Polygon( new_points )
-        va.at[ii,'PERIMETER'] = new_perim.length
+        vtd.at[ii,'PERIMETER'] = new_perim.length
 
 # ---------------------------------------------------------------------
 #  FILL_HOLES()
@@ -115,7 +210,7 @@ def fill_holes( gdf ):
                     pop1 = gdf.at[jj,'POPULATION']
                 except KeyError:
                     continue
-            
+
                 # If this object intersects the hole...
                 if hole.intersects( p1 ):
                     try:
@@ -133,7 +228,7 @@ def fill_holes( gdf ):
 
                         # Get out of loop
                         break
-                    
+
                     except ValueError:
                         continue
 
@@ -154,12 +249,14 @@ def write_shapefile( gdf ):
                ('INTPTLON20', 'str:12'),
                ('PERIMETER',  'float'),
                ('POPULATION', 'int:14'),
+               ('DEMOCRAT',   'int:14'),
+               ('REPUBLICAN', 'int:14'),
                ('NEIGHBORS',  'str:512') ]
 
     shapefile_schema = {'properties': OrderedDict( columns ),
                         'geometry': 'Polygon' }
-    
-    with fiona.open( './jax_tl_2020_51_vtd20.shp', 'w',
+
+    with fiona.open( output_file, 'w',
                      driver = 'ESRI Shapefile',
                      crs = {'init': 'epsg:4269'},
                      schema = shapefile_schema ) as sink:
@@ -184,7 +281,7 @@ def write_shapefile( gdf ):
                         list_str = list_str[0:-1]
                     list_str += ']'
                     data[ii] = ( data[ii][0], list_str )
-                    
+
             coords = [ gdf.at[ndx,'geometry'].exterior.coords ]
             dict = { 'type': 'Feature',
                      'id': ndx,
@@ -193,59 +290,62 @@ def write_shapefile( gdf ):
             }
 
             sink.write( dict )
-        
 
-    
 # ---------------------------------------------------------------------
 #  MAIN PROGRAM
 # ---------------------------------------------------------------------
+# Parse command line
+parse_command_line()
 
 # Read Shapefile for Voting Districts
-va = gpd.read_file( "../census/2020/Virginia/tl_2020_51_vtd20.shp" )
+vtd = gpd.read_file( shape_file )
 
-nObjects = len(va.index)
+nObjects = len(vtd.index)
 print( 'There are %d entries.' %nObjects )
-print( va.columns )
+print( vtd.columns )
+
+add_vote_columns()
+print( vtd.columns )
 
 add_population_column()
-print( va.columns )
+print( vtd.columns )
 
 # Break up MultiPolygon Voting Districts into distinct polygons
 for ii in list(range(nObjects)):
-    p0 = va.at[ii,'geometry']
+    p0 = vtd.at[ii,'geometry']
     if ( type(p0) == MultiPolygon ):
         print ( ii, ' is not a polygon' )
-        polygons = list( p0 )
+        polygons = list( p0.geoms )
         lengths = [ poly.length for poly in polygons ]
         print( lengths )
         longest = lengths.index(max(lengths))
         print( 'Longest is %d' %longest )
         # Loop through polygons
         for jj in list(range(len(polygons))):
-            line = va.loc[ii]
+            line = vtd.loc[ii]
             if jj == longest:
                 nRec = ii
             else:
-                nRec = len(va)
-                va.loc[nRec] = va.loc[ii]
-                
+                nRec = len(vtd)
+                vtd.loc[nRec] = vtd.loc[ii]
+
             # Set values for new row.
-            va.at[nRec, 'geometry'] = polygons[jj]
+            vtd.at[nRec, 'geometry'] = polygons[jj]
             pt = polygons[jj].representative_point()
             coords = list(pt.coords)
-            va.at[nRec, 'INTPTLON10'] = coords[0][0]
-            va.at[nRec, 'INTPTLAT10'] = coords[0][1]
+            vtd.at[nRec, 'INTPTLON10'] = coords[0][0]
+            vtd.at[nRec, 'INTPTLAT10'] = coords[0][1]
             if jj != longest:
-                va.at[nRec, 'POPULATION'] = 0
-            
+                vtd.at[nRec, 'POPULATION'] = 0
+
 print( 'Rechecking polygons...' )
-for ndx in va.index:
-    p0 = va.at[ndx,'geometry']
+for ndx in vtd.index:
+    p0 = vtd.at[ndx,'geometry']
     if ( type(p0) != Polygon ):
         print ( ii, ' is not a polygon' )
         exit()
 
-nObjects = len(va.index)
+nObjects = len(vtd.index)
 print( 'We now have %d rows.' %nObjects )
 
 # Add PERIMETER column
@@ -253,58 +353,60 @@ add_perimeter_column()
 
 # Show population
 total_pop = 0
-for ii in va.index:
-    total_pop += va.at[ii,'POPULATION']
+for ii in vtd.index:
+    total_pop += vtd.at[ii,'POPULATION']
 print ( 'TOTAL POPULATION: ' + str(total_pop) )
 
-fill_holes( va )
+fill_holes( vtd )
 
 # Verify population
 total_pop = 0
-for ii in va.index:
-    total_pop += va.at[ii,'POPULATION']
+for ii in vtd.index:
+    total_pop += vtd.at[ii,'POPULATION']
 print ( 'TOTAL POPULATION: ' + str(total_pop) )
 
-nObjects = len(va.index)
+nObjects = len(vtd.index)
 print( 'We now have %d rows.' %nObjects )
 
 # See which ones still have holes
-for ii in va.index:
+for ii in vtd.index:
     nHoles = len(p0.interiors)
     if nHoles > 0: print( 'VTD %d still has %d holes.' %(ii, nHoles) )
 
 
-print( 'va: ', len(va) )
-print( 'va.index: ', len(va.index) )
+print( 'vtd: ', len(vtd) )
+print( 'vtd.index: ', len(vtd.index) )
 
-neighbors = [[] for ii in va.index ]
+neighbors = [[] for ii in vtd.index ]
 
-for ii in va.index:
-    p0 = va.at[ii,'geometry']
-    for jj in va.index:
+for ii in vtd.index:
+    p0 = vtd.at[ii,'geometry']
+    for jj in vtd.index:
         if ii >= jj: continue
-        p1 = va.at[jj,'geometry']
+        p1 = vtd.at[jj,'geometry']
         if p0.intersects(p1):
             border = shape(mapping(p0.intersection(p1)))
             if border.length > 0.0:
                 length = 0.0
                 new_lines = []
-                if type(border) == LineString: border = MultiLineString( [border] )
-                for linestring in border:
+                if type(border) == LineString:
+                    border = MultiLineString( [border] )
+                for linestring in border.geoms:
                     new_coords = []
                     for point in linestring.coords:
                         new_coords.append( ll_to_m( point ) )
                     try:
-                        new_lines.append( LineString( new_coords ) )
+                        if len(new_coords) > 1:
+                            new_lines.append( LineString( new_coords ) )
                     except ValueError:
                         continue
-                        
+
                     new_border = MultiLineString( new_lines )
-                    
+
                 print( '%d,%d,%f' %(ii, jj, new_border.length) )
                 neighbors[ii].append( (jj, new_border.length) )
                 # neighbors[jj].append( (ii, new_border.length) )
 
-va['NEIGHBORS'] = neighbors
-write_shapefile( va )
+vtd['NEIGHBORS'] = neighbors
+write_shapefile( vtd )
 exit()
