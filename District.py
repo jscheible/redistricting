@@ -1,17 +1,19 @@
 import geopandas as gpd
 import matplotlib.pyplot as plt
 from VotingDistrict import VotingDistrict
-import statistics
+import numpy
 
 class District:
     count = 0
     districts = []
     population = 0
-    
+
     def __init__( self ):
         self.id = District.count
         District.count += 1
         self.population = 0
+        self.democrat = 0
+        self.republican = 0
         self.perimeter = 0.0
         self.voting_districts = []
         self.neighboring_districts = []
@@ -24,7 +26,23 @@ class District:
             if not district.isContiguous():
                 discontiguous.append( district.id )
         return discontiguous
-    
+
+    def voting():
+        print( '----------------------------------------------------' )
+        print( '| District ID |   Democrat   | Republican | Result |' )
+        print( '----------------------------------------------------' )
+        for district in District.districts:
+            if district.democrat > district.republican:
+                result = 'D'
+            elif district.democrat < district.republican:
+                result = 'R'
+            else:
+                result = '-'
+
+            print( '|     %2d      |  %7d     |  %7d   |   %s    |'
+                       %( district.id, district.democrat, district.republican, result ) )
+        print( '----------------------------------------------------' )
+
     def info():
         voting_districts = []
         populations = []
@@ -36,7 +54,7 @@ class District:
             voting_districts.append( district.numVotingDistricts() )
             populations.append( district.population )
             perimeters.append( district.getPerimeter()/1000.0 )
-            
+
             if district.isContiguous():
                 print( '|     %2d      |      Y     |      %6d      | %9d  |  %9.0f      |'
                        %( district.id, district.numVotingDistricts(),
@@ -53,11 +71,10 @@ class District:
         print( '|   Max       |     N/A    |      %6d      | %9d  |  %9.0f      |'
                %( max(voting_districts), max(populations), max(perimeters) ) )
         print( '|   Mean      |     N/A    |      %6d      | %9d  |  %9.0f      |'
-               %( statistics.mean(voting_districts), statistics.mean(populations), statistics.mean(perimeters) ) )
+               %( numpy.mean(voting_districts), numpy.mean(populations), numpy.mean(perimeters) ) )
         print( '|   StDev     |     N/A    |      %6d      | %9d  |  %9.0f      |'
-               %( statistics.stdev(voting_districts), statistics.stdev(populations), statistics.stdev(perimeters) ) )
+               %( numpy.std(voting_districts), numpy.std(populations), numpy.std(perimeters) ) )
         print( '------------------------------------------------------------------------------' )
-            
 
 
     def addVotingDistrict( self, voting_district ):
@@ -68,6 +85,8 @@ class District:
         self.voting_districts.append( voting_district )
         self.perimeter_up_to_date = False
         self.population += voting_district.population
+        self.democrat += voting_district.democrat
+        self.republican += voting_district.republican
         District.population += voting_district.population
         voting_district.district = self.id
 
@@ -78,6 +97,8 @@ class District:
             voting_district.district = None
             self.perimeter_up_to_date = False
             self.population -= voting_district.population
+            self.democrat -= voting_district.democrat
+            self.republican -= voting_district.republican
             District.population -= voting_district.population
         except ValueError:
             pass
@@ -111,7 +132,7 @@ class District:
                 # If districts match, add border with neighbor
                 if neighbor.voting_district.district == district:
                     district_border_len += neighbor.border_len
-                    
+
         return district_border_len
 
     #-------------------------------------------------------------------------
@@ -132,23 +153,23 @@ class District:
                     self.perimeter -= neighbor.border_len
         self.perimeter_up_to_date = True
         return self.perimeter
-                
+
     def getMetric():
         district_perimeters = []
         district_populations = []
         for district in District.districts:
             district_perimeters.append( district.getPerimeter() )
             district_populations.append( district.population )
-        perim_mean = statistics.mean( district_perimeters )
-        perim_stdev = statistics.stdev( district_perimeters )
-        pop_mean = statistics.mean( district_populations )
-        pop_stdev = statistics.stdev( district_populations )
+        perim_mean = numpy.mean( district_perimeters )
+        perim_stdev = numpy.std( district_perimeters )
+        pop_mean = numpy.mean( district_populations )
+        pop_stdev = numpy.std( district_populations )
 
         metric = ( perim_stdev/perim_mean + pop_stdev/pop_mean ) / 2.0
         return metric
 
     def plotDistricts():
-        data = gpd.read_file( "jax_tl_2010_51_bg10.shp" )
+        data = gpd.read_file( shape_file )
         # Add district columns
         cong_dist = []
         for voting_district in VotingDistrict.voting_districts:
@@ -174,7 +195,8 @@ class District:
                     block_ids.append( item.id )
 
         print( 'Showing blocks: ', block_ids )
-        data = gpd.read_file( "jax_tl_2020_51_vtd20.shp" )
+        data = gpd.read_file( shape_file )
+
         # Add district columns
         cong_dist = []
         for voting_district in VotingDistrict.voting_districts:
@@ -191,13 +213,13 @@ class District:
 
         data.plot(column='CongDist')
         plt.show()
-        
+
     def getPopMetric():
         district_populations = []
         for district in District.districts:
             district_populations.append( district.population )
-        pop_mean = statistics.mean( district_populations )
-        pop_stdev = statistics.stdev( district_populations )
+        pop_mean = numpy.mean( district_populations )
+        pop_stdev = numpy.std( district_populations )
 
         metric = pop_stdev/pop_mean
         return metric
@@ -207,7 +229,7 @@ class District:
     #------------------------------------------------------------------
     def isContiguous( self ):
         if len( self.voting_districts ) == 0: return True
-        
+
         voting_districts = []
         nCurrent = 0
         start = self.voting_districts[0]
@@ -234,7 +256,7 @@ class District:
             if neighbor.voting_district.district == voting_district.district:
                 border_len += neighbor.border_len
         return border_len
-        
+
     #------------------------------------------------------------------
     # Returns list of districts that border this block group.
     #------------------------------------------------------------------
@@ -256,9 +278,9 @@ class District:
                 if district.getBorderLength( voting_district ) > longest:
                     best_fit = district
             best_fit.addVotingDistrict( voting_district )
-            
+
         return neighboring_districts
-        
+
     #------------------------------------------------------------------
     # Builds the set of this district's border blocks.
     #------------------------------------------------------------------
@@ -290,7 +312,7 @@ class District:
         neighboring_districts = District.getNeighboringDistricts( voting_district )
 
         return ( neighboring_district_id in neighboring_districts )
-        
+
     #----------------------------------------------------------------
     # Compute ratio of candidate's border with its current district
     # and its border with neighboring district.
@@ -300,7 +322,7 @@ class District:
 
         if voting_district.district == district_id:
             return 0.0
-        
+
         current_district_border = 0.0
         neighboring_district_border = 0.0
         for neighbor in voting_district.neighbors:
@@ -321,12 +343,12 @@ class District:
 
         # Build set of this district's border blocks
         border_set = self.getBorderBlocks()
-        
+
         # Loop over border blocks
         for key in border_set:
             candidate = key[0]
             neighboring_district_id = key[1]
-            
+
             # If not a valid candidate, continue looping
             if not self.isValidCandidate( candidate, neighboring_district_id ): continue
 
@@ -344,7 +366,7 @@ class District:
             # Compare current with best and save best
             if best==None or candidates[best] < candidates[key]:
                 best = key
-                
+
         return best
 
     #-----------------------------------------------------------------------
@@ -354,20 +376,20 @@ class District:
     def sortByPopulation():
         sorted = [District.districts[0]]
         least = District.districts[0].population
-        
+
         for district in District.districts[1:]:
             if district.population < least:
                 sorted.append( district )
                 least = district.population
                 continue
-            
+
             for ii in list(range(len(sorted))):
                 if district.population > sorted[ii].population:
                     sorted.insert( ii, district )
                     break
-                
+
         return sorted
-            
+
     #-----------------------------------------------------------------------
     # Performs an insertion sort and returns list of district IDs
     # from largest perimeter to smallest.
@@ -375,7 +397,7 @@ class District:
     def sortByPerimeter():
         sorted = [District.districts[0]]
         smallest = District.districts[0].getPerimeter()
-        
+
         for district in District.districts[1:]:
             perim = district.getPerimeter() 
             if perim < smallest:
@@ -387,9 +409,9 @@ class District:
                 if  perim > sorted[ii].getPerimeter():
                     sorted.insert( ii, district )
                     break
-                
+
         return sorted
-            
+
     def minimizeTotalPerimeter( tolerance ):
         # tolerance: the largest allowable normalized standard deviation
 
@@ -397,7 +419,7 @@ class District:
         pops = District.getDistrictPopulations()
         max_pop = max( pops )
         min_pop = min( pops )
-        sd = statistics.stdev( pops )
+        sd = numpy.std( pops )
         metric = (max_pop - min_pop) / ( District.population / District.count )
 
         print( 'Max Pop: %7d' %max_pop )
@@ -409,7 +431,7 @@ class District:
         while numTransferred != 0:
 
             numTransferred = 0
-            
+
             # Sort districts by perimeter
             sorted = District.sortByPerimeter()
 
@@ -420,7 +442,7 @@ class District:
 
             # Plot districts
             # District.plotDistricts()
-            
+
             # Loop over districts in sorted order
             for district in sorted:
 
@@ -449,7 +471,7 @@ class District:
                     if border_ratio < 1.0:
                         move_me = District.getBestCandidate( candidates )
                         continue
-                        
+
                     # Ensure that this candidate is still valid
                     if not district.isValidCandidate( move_me[0], move_me[1] ):
                         continue
@@ -464,7 +486,7 @@ class District:
                     pops = District.getDistrictPopulations()
                     max_pop = max( pops )
                     min_pop = min( pops )
-                    sd = statistics.stdev( pops )
+                    sd = numpy.std( pops )
                     metric = (max_pop - min_pop) / ( District.population / District.count )
 
                     # If we have exceeded tolerance, return block
@@ -473,7 +495,7 @@ class District:
                         district.addVotingDistrict( voting_district )
                         numTransferred -= 1
                         continue
-                    
+
                     # If the current district is now discontiguous,
                     # we need to dissolve the smaller part
                     if not district.isContiguous():
@@ -496,19 +518,19 @@ class District:
 
             # Fix discontiguous districts
             District.fixAllDiscontiguous()
-            
+
             # Recompute metrics
             pops = District.getDistrictPopulations()
             max_pop = max( pops )
             min_pop = min( pops )
-            sd = statistics.stdev( pops )
+            sd = numpy.std( pops )
             metric = sd / (District.population / District.count)
 
             print( 'Max Pop: ', max_pop )
             print( 'Min Pop: ', min_pop )
             print( 'Std Dev: %3f' %metric )
         return
-        
+
     #-----------------------------------------------------------------------
     # Moves border blocks, one at a time, from one district to another,
     # until the required balance is met.
@@ -521,7 +543,7 @@ class District:
         pops = District.getDistrictPopulations()
         max_pop = max( pops )
         min_pop = min( pops )
-        sd = statistics.stdev( pops )
+        sd = numpy.std( pops )
         metric = (max_pop-min_pop) / (District.population / District.count)
 
         print( 'Max Pop: ', max_pop )
@@ -533,7 +555,7 @@ class District:
         while metric > tolerance and numTransferred != 0:
 
             numTransferred = 0
-            
+
             # Sort districts by population
             sorted = District.sortByPopulation()
 
@@ -577,7 +599,7 @@ class District:
                     if pop_diff < voting_district.population:
                         move_me = District.getBestCandidate( candidates )
                         continue
-        
+
                     # Move block group to new district
                     print( 'Moving block group %4d from %2d to %2d'
                            %( voting_district.id, voting_district.district, neighboring_district.id ) )
@@ -613,7 +635,7 @@ class District:
             pops = District.getDistrictPopulations()
             max_pop = max( pops )
             min_pop = min( pops )
-            sd = statistics.stdev( pops )
+            sd = numpy.std( pops )
             metric = (max_pop-min_pop) / (District.population / District.count)
 
             print( 'Max Pop: ', max_pop )
@@ -621,7 +643,7 @@ class District:
             print( 'Std Dev: %.3f' %sd )
             print( 'Metric:  %.3f' %metric )
         return
-    
+
     #-----------------------------------------------------------------------
     # Returns a list containing all district populations
     #-----------------------------------------------------------------------
@@ -630,6 +652,7 @@ class District:
         for district in District.districts:
             populations.append( district.population )
         return populations
+
     #-----------------------------------------------------------------------
     # This function returns a list of tuples.  These tuples have:
     # ( candidate, neighboring_district, dPerim )
@@ -670,14 +693,14 @@ class District:
                 print( '   District %2d:   %10d'  %(self.id, self.population) )
                 print( '   District %2d:   %10d'  %(neighbor_district.id, neighbor_district.population) )
                 continue                   
-                                                    
+
             if  candidate.population >= pop_diff:
                 print( 'Block group %d has a population larger than difference' %candidate.id )
                 print( '   Block group:    %10d'  %candidate.population )
                 print( '   This district:  %10d'  %self.population )
                 print( '   District %2d:   %10d'  %(neighbor_district.id, neighbor_district.population) )
                 continue
-            
+
             # ---------------------------------------------------------
             # Determine difference in total perimeter for this district
             # ---------------------------------------------------------
@@ -708,13 +731,13 @@ class District:
 
         # Return results
         return results
-        
+
     def reducePopulation( self ):
         totalTransferred = 0
 
         # Create initial list of candidate block groups for transfer
         # to neighboring districts
-        
+
         # Collect all block groups that border less populated districts
         candidates = []
         neighboring_districts = []
@@ -763,13 +786,13 @@ class District:
                     if tmp[1] == neighbor_district:
                         candidates.remove( tmp )
                 continue
-            
+
             if  best[0].population >= pop_diff:
                 continue
-                
+
             # Transfer best candidate
             neighbor_district.addVotingDistrict( best[0] )
-            
+
             # Ensure all districts are still contiguous
             discontiguous = District.getDiscontiguous()
             if len(discontiguous) > 0:
@@ -804,14 +827,14 @@ class District:
                 for tmp in candidates:
                     if tmp[0] == neighbor:
                         candidates.remove(tmp)
-                        
+
                 if neighbor.voting_district.district == self.id:
                     for info in self.neighboringDistricts( neighbor.voting_district ):
                         print( 'Adding candidate: %4d, district %2d' %(info[0].id, info[1].id) )
                         candidates.append( info )
-            
+
             print( 'Have %d candidates.' %(len(candidates)) )
-            
+
         print( 'Num transferred: %d' %totalTransferred )
 
         return totalTransferred
@@ -837,7 +860,7 @@ class District:
                 # Loop thru block groups currently in this island
                 for ndx in list(range(len(island))):
                     voting_district = island[ndx]
-                    
+
                     # Loop thru block groups nieghbors
                     for neighbor in voting_district.neighbors:
                         # If neighbor is in the same district
@@ -854,7 +877,7 @@ class District:
 
             # Add to list of islands
             islands.append( (island,population) )
-            
+
         return islands
 
     def fixDiscontiguous( self ):
@@ -883,14 +906,14 @@ class District:
                 for voting_district in island[0]:
                     old_district_id = voting_district.district
                     if old_district_id != self.id: continue
-                    
+
                     print( 'This district: %d' %self.id )
                     print( 'Trying to relocate block group %d from %d.'
                            % (voting_district.id,voting_district.district) )
                     for neighbor in voting_district.neighbors:
                         print( '  Neighbor %d is in %d.'
                                % (neighbor.voting_district.id,neighbor.voting_district.district) )
-                        
+
                         if neighbor.voting_district.district != old_district_id:
                             new_district_id = neighbor.voting_district.district
                             new_district = District.districts[new_district_id]
@@ -901,10 +924,10 @@ class District:
                     if count > 10: continue
                     if voting_district.district == old_district_id:
                         tmp.append( voting_district )
-                        
+
                 island[0].clear()
                 for bg in tmp: island[0].append( bg )
-        
+
     def fixAllDiscontiguous():
         for district in District.districts:
             if not district.isContiguous():
