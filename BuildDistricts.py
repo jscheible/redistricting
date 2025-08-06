@@ -13,6 +13,8 @@ import matplotlib.cm as cm
 import sys, getopt
 from VotingDistrict import VotingDistrict
 from District import District
+from shapely.geometry import Point
+import time
 
 class Neighbor:
     def __init__( self, voting_district, border_len ):
@@ -20,7 +22,6 @@ class Neighbor:
         assert( isinstance( border_len, float ) )
         self.voting_district = voting_district
         self.border_len = border_len
-
 
 def buildDistricts():
     # Create new District objects
@@ -32,12 +33,12 @@ def buildDistricts():
         startingVotingDistrict = district.id * avgVotingDistricts
         district.addVotingDistrict( VotingDistrict.voting_districts[startingVotingDistrict] )
 
-    print( 'There are %d unassigned block groups' %VotingDistrict.getNumUnassigned() )
-    # While there are unassigned block groups
+    print( 'There are %d unassigned VTDs' %VotingDistrict.getNumUnassigned() )
+    # While there are unassigned VTDs
     while( VotingDistrict.getNumUnassigned() > 0 ):
-        print( 'There are %d unassigned block groups' %VotingDistrict.getNumUnassigned() )
+        print( 'There are %d unassigned VTDs' %VotingDistrict.getNumUnassigned() )
 
-        # Loop over districts, adding one layer of block groups at a time
+        # Loop over districts, adding one layer of VTDs at a time
         for district in District.districts:
 
             # Loop over block groups currently in district
@@ -83,47 +84,6 @@ def assignUnassignedVotingDistricts():
                         # Exit loop over neighbors
                         break
 
-def equalizePerimeters():
-    numTransferred = -1
-    district_perimeters = []
-    metric = District.getMetric()
-    print( "Metric: %.4f" %metric )
-
-    while( numTransferred != 0 and metric > 0.2 ):
-        # Reset numTransferred
-        numTransferred = 0
-
-        # Loop over all voting districts
-        for voting_district in voting_districts:
-            this_district = District.districts[voting_district.district]
-
-            # Loop over neighbors
-            for neighbor in voting_district.neighbors:
-                neighbor_district = District.districts[neighbor.voting_district.district]
-                if ( neighbor_district == this_district ): continue
-
-                # Get current metric
-                current_metric = District.getMetric()
-
-                # move neighbor to this distric
-                neighbor_district.delVotingDistrict( neighbor.voting_district )
-                this_district.addVotingDistrict( neighbor.voting_district )
-                numTransferred += 1
-
-                # recompute metric
-                new_metric = District.getMetric()
-
-                # If new metric is not better than the old...
-                if ( new_metric >= current_metric ):
-                    # move voting district back to this district
-                    this_district.delVotingDistrict( neighbor.voting_district )
-                    neighbor_district.addVotingDistrict( neighbor.voting_district )
-                    numTransferred -= 1
-
-        metric = District.getMetric()
-        print( "Metric: %.4f" %metric )
-
-
 def minimizeTotalPerimeter():
     numTransferred = -1
     district_perimeters = []
@@ -164,7 +124,7 @@ def minimizeTotalPerimeter():
                new_sum = new_this_perimeter + new_neighbor_perimeter
 
                # If new perimeters larger than old...
-               if ( new_sum >= original_sum ):
+               if ( new_sum > original_sum ):
                    # move voting district back to this district
                    neighbor_district.addVotingDistrict( neighbor.voting_district )
                    numTransferred -= 1
@@ -198,14 +158,14 @@ def findWorstProtrusion():
             neighboring_districts.add( neighbor.voting_district.district )
 
         # If this voting district has only one neighboring district (its own),
-        # it is not a border group.
+        # it is not a border VTD.
         if len( neighboring_districts ) == 1:
             continue
 
-        # Collect at least 20 neighbors in the same district
+        # Collect at least 4 neighbors in the same district
         # Continue to accumulate neighboring districts
         plot_these = [voting_district]
-        while len(plot_these) < 20:
+        while len(plot_these) < 4:
             for ii in list(range(len(plot_these))):
                 tmp = plot_these[ii]
                 for neighbor in tmp.neighbors:
@@ -310,23 +270,27 @@ data = gpd.read_file( shape_file )
 
 # Create VotingDistricts from data
 for ndx in data.index:
-    vd = VotingDistrict()
-    vd.population = data.at[ndx,'POPULATION']
-    vd.perimeter = data.at[ndx,'PERIMETER']
+    vtd = VotingDistrict()
+    vtd.population = int( data.at[ndx,'POPULATION'] )
+    vtd.perimeter  = float( data.at[ndx,'PERIMETER'] )
+    vtd.intptlat   = float( data.at[ndx,'INTPTLAT20'] )
+    vtd.intptlon   = float( data.at[ndx,'INTPTLON20'] )
+    vtd.area       = float( data.at[ndx,'ALAND20'] ) + float( data.at[ndx,'AWATER20'] )
+    
     try:
-        vd.democrat   = data.at[ndx,'DEMOCRAT']
-        vd.republican = data.at[ndx,'REPUBLICAN']
+        vtd.democrat   = int( data.at[ndx,'DEMOCRAT'] )
+        vtd.republican = int( data.at[ndx,'REPUBLICAN'] )
     except:
-        vd.democrat   = 0
-        vd.republican = 0
+        vtd.democrat   = 0
+        vtd.republican = 0
 
 # Add neighbors to voting districts
 for ndx in data.index:
-    vd = VotingDistrict.voting_districts[ndx]
+    vtd = VotingDistrict.voting_districts[ndx]
     neighbors = ast.literal_eval( data.at[ndx,'NEIGHBORS'] )
-    for vd_num, border_len in neighbors:
-        vd.neighbors.append( Neighbor(VotingDistrict.voting_districts[vd_num], border_len) )
-        VotingDistrict.voting_districts[vd_num].neighbors.append( Neighbor(vd, border_len) )
+    for vtd_num, border_len in neighbors:
+        vtd.neighbors.append( Neighbor(VotingDistrict.voting_districts[vtd_num], border_len) )
+        VotingDistrict.voting_districts[vtd_num].neighbors.append( Neighbor(vtd, border_len) )
 
 # Average number of voting districts per district
 avgVotingDistricts = math.floor( VotingDistrict.getVotingDistrictCount() / nDistricts )
@@ -342,33 +306,56 @@ District.info()
 # Progressively make things better
 # Try to equalize populations
 for tol in [4*tolerance, 3*tolerance, 2*tolerance, tolerance]:
-    District.balancePopulations( tol/2.0 )
-    District.minimizeTotalPerimeter( tol )
+    District.balancePopulations( tol / 2.0 )
+    print( "Balanced population with tol: ", (tol/2.0) )
+    District.info()
+    District.minimizeTotalPerimeter2( tol )
+    print( "Minimized perimeter with tol: ", tol )
+    District.info()
 
+print( 'Before Protrusion Correction:' )
 District.info()
+# District.voting()
 plotDistricts()
 
 worst_ratio = 100.0
 count = 0
-max_count = 100
+max_count = 20
 while worst_ratio > 3.0 and count < max_count:
-    max_count += 1
+    count += 1
     worst_protrusion, worst_ratio, move_to_district = findWorstProtrusion()
+    print( 'Count: %4d' %count )
     print( 'Worst Ratio: %4d' %worst_ratio )
     for voting_district in worst_protrusion:
         District.districts[move_to_district].addVotingDistrict( voting_district )
     # Try to equalize populations
     District.balancePopulations( tolerance/2.0 )
-    District.minimizeTotalPerimeter( tolerance )
-    # District.info()
+    print( "Balanced to tolerance of ", tolerance/2.0 )
+    District.info()
+    time.sleep(1)
+    District.minimizeTotalPerimeter2( tolerance )
+    print( "Minimized total perimeter with tolerance of ", tolerance )
+    District.info()
+    time.sleep(1)
     # plotDistricts()
 
 print( 'Final Build:' )
 District.info()
-District.voting()
+# District.voting()
 plotDistricts()
 
 exit()
+
+# Find the worst VTD abd plot it.
+worst = None
+worst_ratio = 0.0
+for vtd in VotingDistrict.voting_districts:
+    ratio = vtd.getBorderRatio()
+    if worst_ratio < ratio:
+        worst = vtd
+        worst_ratio = ratio
+
+District.showDistrictAndBlock( vtd.district, vtd )
 
 # If more than half are border VTDs, this is a protrusion
 print ( 'Voting District: %4d' %voting_district.id )

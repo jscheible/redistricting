@@ -2,6 +2,9 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 from VotingDistrict import VotingDistrict
 import numpy
+from shapely.geometry import Point, Polygon, MultiPolygon, MultiLineString, LineString, shape, mapping
+import sys
+import time
 
 class District:
     count = 0
@@ -15,6 +18,7 @@ class District:
         self.democrat = 0
         self.republican = 0
         self.perimeter = 0.0
+        self.area = 0.0
         self.voting_districts = []
         self.neighboring_districts = []
         self.perimeter_up_to_date = True
@@ -27,6 +31,17 @@ class District:
                 discontiguous.append( district.id )
         return discontiguous
 
+    def getWeightedCentroid( self ):
+        sum_lat = 0.0
+        sum_lon = 0.0
+        sum_pop = 0
+        for vtd in self.voting_districts:
+            sum_lat += vtd.population * vtd.intptlat
+            sum_lon += vtd.population * vtd.intptlon
+            sum_pop += vtd.population
+
+        return sum_lat/sum_pop, sum_lon/sum_pop
+    
     def voting():
         print( '----------------------------------------------------' )
         print( '| District ID |   Democrat   | Republican | Result |' )
@@ -72,10 +87,11 @@ class District:
                %( max(voting_districts), max(populations), max(perimeters) ) )
         print( '|   Mean      |     N/A    |      %6d      | %9d  |  %9.0f      |'
                %( numpy.mean(voting_districts), numpy.mean(populations), numpy.mean(perimeters) ) )
-        print( '|   StDev     |     N/A    |      %6d      | %9d  |  %9.0f      |'
-               %( numpy.std(voting_districts), numpy.std(populations), numpy.std(perimeters) ) )
+        print( '|   Metric    |     N/A    |      %6d      |     N/A    |       N/A       |'
+               %( 100*(max(populations)-min(populations))/ numpy.mean(populations) ) )
         print( '------------------------------------------------------------------------------' )
-
+        sys.stdout.flush()
+        time.sleep(1)
 
     def addVotingDistrict( self, voting_district ):
         assert( isinstance( voting_district, VotingDistrict ) )
@@ -87,7 +103,9 @@ class District:
         self.population += voting_district.population
         self.democrat += voting_district.democrat
         self.republican += voting_district.republican
+        self.area += voting_district.area
         District.population += voting_district.population
+        self.getCompactness()
         voting_district.district = self.id
 
     def delVotingDistrict( self, voting_district ):
@@ -99,10 +117,38 @@ class District:
             self.population -= voting_district.population
             self.democrat -= voting_district.democrat
             self.republican -= voting_district.republican
+            self.area -= voting_district.area
             District.population -= voting_district.population
+            self.getCompactness()
         except ValueError:
             pass
 
+    #-----------------------------------------------------------------------
+    # Returns a compactness measure
+    #-----------------------------------------------------------------------
+    def getCompactness( self ):
+        if ( not self.perimeter_up_to_date ):
+            self.getPerimeter()
+            self.compactness = self.area / ((self.perimeter/1000.0)*(self.perimeter/1000.0))
+        return self.compactness
+    
+    #-----------------------------------------------------------------------
+    # Returns the VTD furthest from the population centroid
+    #-----------------------------------------------------------------------
+    def getMostRemoteVTD( self ):
+        mostDistant = 0.0
+        clat, clon = self.getWeightedCentroid()
+        for vtd in self.voting_districts:
+            dist = ( clat - vtd.intptlat )**2 + ( clon - vtd.intptlat )**2
+            if dist > mostDistant:
+                furthest = vtd
+                mostDistant = dist
+
+        return furthest
+        
+    #-----------------------------------------------------------------------
+    # Returns the largest voting district by number of VTDs
+    #-----------------------------------------------------------------------
     def getLargest():
         nLargest = 0
         for district in District.districts:
@@ -116,7 +162,7 @@ class District:
         return len( self.voting_districts )
 
     #-------------------------------------------------------------------------
-    # Returns the length of the border between this list of block groups
+    # Returns the length of the border between this list of VTDs
     # and the specified district.
     #-------------------------------------------------------------------------
     def getBorderWithDistrict( voting_districts, district ):
@@ -136,17 +182,16 @@ class District:
         return district_border_len
 
     #-------------------------------------------------------------------------
-    # Returns the perimeter of the district, or the perimeter of
-    # the list of block groups specified in the optional parameter.
+    # Returns the perimeter of the district
     #-------------------------------------------------------------------------
     def getPerimeter( self ):
         if ( self.perimeter_up_to_date ): return self.perimeter
         self.perimeter = 0.0
         for voting_district in self.voting_districts:
-            # Add perimeter of block group to perimeter of district
+            # Add perimeter of VTD to perimeter of district
             self.perimeter += voting_district.perimeter
 
-            # Loop over neighboring block groups
+            # Loop over neighboring VTDs
             for neighbor in voting_district.neighbors:
                 # If neighbor is in the same district, subtract border length
                 if ( neighbor.voting_district.district == voting_district.district ):
@@ -165,7 +210,7 @@ class District:
         pop_mean = numpy.mean( district_populations )
         pop_stdev = numpy.std( district_populations )
 
-        metric = ( perim_stdev/perim_mean + pop_stdev/pop_mean ) / 2.0
+        metric = ( perim_stdev/perim_mean + pop_stdev/pop_mean ) / 2.0 
         return metric
 
     def plotDistricts():
@@ -225,7 +270,7 @@ class District:
         return metric
 
     #------------------------------------------------------------------
-    # Returns whether a block group is contiguous.
+    # Returns whether a district is contiguous.
     #------------------------------------------------------------------
     def isContiguous( self ):
         if len( self.voting_districts ) == 0: return True
@@ -284,7 +329,7 @@ class District:
     #------------------------------------------------------------------
     # Builds the set of this district's border blocks.
     #------------------------------------------------------------------
-    def getBorderBlocks( self ):
+    def getBorderVTDs( self ):
         border_set = set()
         for voting_district in self.voting_districts:
             for neighboring_district_id in District.getNeighboringDistricts( voting_district ):
@@ -314,37 +359,34 @@ class District:
         return ( neighboring_district_id in neighboring_districts )
 
     #----------------------------------------------------------------
-    # Compute ratio of candidate's border with its current district
-    # and its border with neighboring district.
-    # A border rati of 0.0 means that the two do not share a border.
+    # Compute ratio of candidate's border with neighboring district
+    # and its perimeter.
+    # A border ratio of 0.0 means that the two do not share a border.
     #----------------------------------------------------------------
-    def getBorderRatio( voting_district, district_id ):
+    def getBorderRatio( self, voting_district ):
 
-        if voting_district.district == district_id:
+        if voting_district.district == self.id:
             return 0.0
 
         current_district_border = 0.0
         neighboring_district_border = 0.0
         for neighbor in voting_district.neighbors:
-            if neighbor.voting_district.district == voting_district.district:
-                current_district_border += neighbor.border_len
-            elif neighbor.voting_district.district == district_id:
+            if neighbor.voting_district.district == self.id:
                 neighboring_district_border += neighbor.border_len
 
-        return (neighboring_district_border / current_district_border)
+        return (neighboring_district_border / voting_district.perimeter)
 
     #------------------------------------------------------------------
-    # This function returns the best block group to transfer.
-    # It will return the most protruding block group that
-    # does not increase population disparity.
+    # This function builds a dictionary of border VTDs with
+    # their border ratio (district border / perimeter).
     #------------------------------------------------------------------
     def buildCandidateDict( self ):
         candidates = {}
 
-        # Build set of this district's border blocks
-        border_set = self.getBorderBlocks()
+        # Build set of this district's border VTDs
+        border_set = self.getBorderVTDs()
 
-        # Loop over border blocks
+        # Loop over border VTDs
         for key in border_set:
             candidate = key[0]
             neighboring_district_id = key[1]
@@ -352,13 +394,18 @@ class District:
             # If not a valid candidate, continue looping
             if not self.isValidCandidate( candidate, neighboring_district_id ): continue
 
-            border_ratio = District.getBorderRatio( candidate, neighboring_district_id )
+            # Get border ratio
+            border_ratio = District.districts[neighboring_district_id].getBorderRatio( candidate )
 
             # Save this information in dictionary of candidates
-            candidates.update( {key: border_ratio} )
+            candidates.update( {key: border_ratio } )
 
         return candidates
 
+    #------------------------------------------------------------------
+    # This function returns the best VTD to transfer.
+    # It will return the VTD with the smallest border ratio.
+    #------------------------------------------------------------------
     def getBestCandidate( candidates ):
         best = None
         # Loop through candidates
@@ -392,6 +439,28 @@ class District:
 
     #-----------------------------------------------------------------------
     # Performs an insertion sort and returns list of district IDs
+    # from least compact to most compact.
+    #-----------------------------------------------------------------------
+    def sortByCompactness():
+        sorted = [District.districts[0]]
+        mostCompact = District.districts[0].getCompactness()
+
+        for district in District.districts[1:]:
+            compactness = district.getCompactness() 
+            if compactness > mostCompact:
+                sorted.append( district )
+                mostCompact = compactness
+                continue
+
+            for ii in list(range(len(sorted))):
+                if compactness < sorted[ii].getCompactness():
+                    sorted.insert( ii, district )
+                    break
+
+        return sorted
+    
+    #-----------------------------------------------------------------------
+    # Performs an insertion sort and returns list of district IDs
     # from largest perimeter to smallest.
     #-----------------------------------------------------------------------
     def sortByPerimeter():
@@ -412,19 +481,153 @@ class District:
 
         return sorted
 
-    def minimizeTotalPerimeter( tolerance ):
-        # tolerance: the largest allowable normalized standard deviation
-
+    def minimizeTotalPerimeter2( tolerance ):
+        # tolerance: the largest allowable difference in population, divided by the average
         # Compute metrics
         pops = District.getDistrictPopulations()
+        max_allowed_population = (1.0 + tolerance/2.0)*( District.population / District.count )
+        min_allowed_population = (1.0 - tolerance/2.0)*( District.population / District.count )
         max_pop = max( pops )
         min_pop = min( pops )
-        sd = numpy.std( pops )
         metric = (max_pop - min_pop) / ( District.population / District.count )
 
         print( 'Max Pop: %7d' %max_pop )
+        print( 'Max Allowed: %7d' %max_allowed_population )
         print( 'Min Pop: %7d' %min_pop )
-        print( 'Std Dev: %3f' %metric )
+        print( 'Min Allowed: %7d' %min_allowed_population )
+        print( 'Tolerance: %3f' %tolerance )
+        print( 'Metric:  %3f' %metric )
+
+        numTransferred = -1
+        while numTransferred != 0:
+
+            print( "Transferred last cycle: ", numTransferred )
+            numTransferred = 0
+
+            # Get all border VTDs
+            candidates = {}
+            for vtd in VotingDistrict.voting_districts:
+                # Get the border ratio for this VTD
+                border_ratio = vtd.getBorderRatio()
+
+                # If border ratio is over 0.5, go to next
+                if border_ratio >= 0.5: continue
+
+                # If there is a border with another district that is longer, add to candidates
+                for neighbor in vtd.neighbors:
+                    ratio = vtd.getBorderRatioWithDistrict( neighbor.voting_district.district )
+                    if ratio > border_ratio:
+                        candidates.update( { vtd: border_ratio } )
+                        continue
+
+            # Get best VTD to move
+            move_me = District.getBestCandidate( candidates )
+
+            # Continue until there are no more to move
+            while move_me != None:
+
+                thisVTD = move_me
+                try:
+                    border_ratio = candidates.pop( move_me )
+                    # print( "Border Ratio: ", border_ratio )
+                except KeyError:
+                    move_me = District.getBestCandidate( candidates )
+                    continue
+
+                # Get VTD's current district
+                thisDistrict = District.districts[thisVTD.district]
+                
+                # Get thisVTD's neighboring districts and border ratios
+                neighboring_districts = {}
+                for neighbor in District.getNeighboringDistricts( thisVTD ):
+                    neighbor_border_ratio = thisVTD.getBorderLenWithDistrict( neighbor ) / thisVTD.perimeter
+                    if neighbor_border_ratio > border_ratio:
+                        neighboring_districts.update( {neighbor:border_ratio} )
+
+                # Loop over these pulling one with the longest border first
+                while len( neighboring_districts ) > 0:
+                    longest_neighbor_district_id = None
+                    longest_neighbor_district = None
+                    longest_border = border_ratio
+                    for key in neighboring_districts:
+                        if neighboring_districts[key] > longest_border:
+                            longest_border = neighboring_districts[key]
+                            longest_neighbor_district_id = key
+                            longest_neighbor_district = District.districts[key]
+
+                    # If longest_neighbor_district is not set, punt
+                    if longest_neighbor_district == None:
+                        move_me = District.getBestCandidate( candidates )
+                        break
+                        
+                    # Remove longest from dictionary
+                    neighboring_districts.pop( longest_neighbor_district_id )
+                
+                    # Ensure that this candidate is still valid
+                    if not thisDistrict.isValidCandidate( thisVTD, longest_neighbor_district_id ):
+                        continue
+
+                    # Print populations
+                    print( "This district's population will be: ", thisDistrict.population - thisVTD.population )
+                    print( "Neighbor district's population will be: ", longest_neighbor_district.population + thisVTD.population )
+                    print( "This VTD's population: ", thisVTD.population )
+                    # Do not move if current district population will drop below minimum allowed
+                    if (thisDistrict.population - thisVTD.population) < min_allowed_population:
+                        continue
+
+                    # Do not move if neighboring district population will exceed maximum allowed
+                    if (longest_neighbor_district.population + thisVTD.population) > max_allowed_population:
+                        continue
+
+                    # Move VTD to new district and exit loop
+                    print( 'Moving VTD %4d from %2d to %2d'
+                           %( thisVTD.id, thisVTD.district, longest_neighbor_district_id ) )
+                    longest_neighbor_district.addVotingDistrict( thisVTD )
+                    break
+                
+                # Recompute metrics.
+                pops = District.getDistrictPopulations()
+                max_pop = max( pops )
+                min_pop = min( pops )
+                metric = (max_pop - min_pop) / ( District.population / District.count )
+
+                # If the current district is now discontiguous,
+                # we need to dissolve the smaller part
+                if not thisDistrict.isContiguous():
+                    thisDistrict.fixDiscontiguous()
+
+                # Get next best VTD to move
+                move_me = District.getBestCandidate( candidates )
+
+            # Fix discontiguous districts
+            District.fixAllDiscontiguous()
+
+            # Recompute metrics
+            pops = District.getDistrictPopulations()
+            max_pop = max( pops )
+            min_pop = min( pops )
+            metric = ( max_pop - min_pop ) / (District.population / District.count)
+
+            print( 'Max Pop: ', max_pop )
+            print( 'Min Pop: ', min_pop )
+            print( 'Metric: %3f' %metric )
+        return
+    
+    def minimizeTotalPerimeter( tolerance ):
+        # tolerance: the largest allowable difference in population, divided by the average
+        # Compute metrics
+        pops = District.getDistrictPopulations()
+        max_allowed_population = (1.0 + tolerance/2.0)*( District.population / District.count )
+        min_allowed_population = (1.0 - tolerance/2.0)*( District.population / District.count )
+        max_pop = max( pops )
+        min_pop = min( pops )
+        metric = (max_pop - min_pop) / ( District.population / District.count )
+
+        print( 'Max Pop: %7d' %max_pop )
+        print( 'Max Allowed: %7d' %max_allowed_population )
+        print( 'Min Pop: %7d' %min_pop )
+        print( 'Min Allowed: %7d' %min_allowed_population )
+        print( 'Metric:  %3f' %metric )
 
         numTransferred = -1
         # Loop twice
@@ -432,13 +635,13 @@ class District:
 
             numTransferred = 0
 
-            # Sort districts by perimeter
-            sorted = District.sortByPerimeter()
+            # Sort districts by compactness ( A/P^2 )
+            sorted = District.sortByCompactness()
 
             # Show sorted districts
             for district in sorted:
-                print( 'District %2d has %8d people, and perimeter of %12.3f m.'
-                       %(district.id, district.population, district.getPerimeter() ) )
+                print( 'District %2d has compactness factor of %12.3f.'
+                       %(district.id, district.getCompactness() ) )
 
             # Plot districts
             # District.plotDistricts()
@@ -446,74 +649,77 @@ class District:
             # Loop over districts in sorted order
             for district in sorted:
 
-                # Build list of candidate block groups to move
-                print( 'Building candidates list...', end='' )
-                candidates = district.buildCandidateDict()
-                print( 'done.' )
+                print( 'District %2d has compactness factor of %12.3f.'
+                       %(district.id, district.getCompactness() ) )
 
-                # Get best block group to move
+                # Build list of candidate VTDs to move
+                # print( 'Building candidates list...', end='' )
+                candidates = district.buildCandidateDict()
+                # print( 'done.' )
+
+                # Get best VTD to move
                 move_me = District.getBestCandidate( candidates )
 
                 # Continue until there are no more to move
                 while move_me != None:
 
-                    voting_district = move_me[0]
-                    neighboring_district = District.districts[move_me[1]]
+                    thisVTD = move_me[0]
                     try:
+                        # distance_from_centroid = candidates.pop( move_me )
+                        # print( "Distance from district centroid: ", distance_from_centroid )
                         border_ratio = candidates.pop( move_me )
+                        # print( "Border Ratio: ", border_ratio )
                     except KeyError:
                         # print( '( %d, %d ) not in candidates'
                         #        %(move_me[0].id, move_me[1]) )
                         move_me = District.getBestCandidate( candidates )
                         continue
 
-                    # Ensure candidate will improve total perimeter
-                    if border_ratio < 1.0:
+                    # Get thisVTD's neighboring districts
+                    longest_border = 0
+                    longest_neighbor_district = None
+                    for neighbor in District.getNeighboringDistricts( thisVTD ):
+                        border_length = thisVTD.getBorderLenWithDistrict( neighbor )
+                        if border_length > longest_border:
+                            longest_border = border_length
+                            longest_neighbor_district = neighbor
+
+                    # If longest_neighbor_district is not set, punt
+                    if longest_neighbor_district == None:
+                        move_me = District.getBestCandidate( candidates )
+                        continue
+                        
+                    # Ensure that this candidate is still valid
+                    if not district.isValidCandidate( thisVTD, longest_neighbor_district ):
                         move_me = District.getBestCandidate( candidates )
                         continue
 
-                    # Ensure that this candidate is still valid
-                    if not district.isValidCandidate( move_me[0], move_me[1] ):
+                    # Do not move if current district population will drop below minimum allowed
+                    if (district.population - thisVTD.population) < min_allowed_population:
+                        move_me = District.getBestCandidate( candidates )
                         continue
 
-                    # Move block group to new district
-                    print( 'Moving block group %4d from %2d to %2d'
-                           %( voting_district.id, voting_district.district, neighboring_district.id ) )
-                    neighboring_district.addVotingDistrict( voting_district )
-                    numTransferred += 1
+                    # Do not move if neighboring district population will exceed maximum allowed
+                    if (longest_neighbor.population - thisVTD.population) > max_allowed_population:
+                        move_me = District.getBestCandidate( candidates )
+                        continue
+
+                    # Move VTD to new district
+                    print( 'Moving VTD %4d from %2d to %2d'
+                           %( thisVTD.id, thisVTD.district, longest_neighbor.id ) )
 
                     # Recompute metrics.
                     pops = District.getDistrictPopulations()
                     max_pop = max( pops )
                     min_pop = min( pops )
-                    sd = numpy.std( pops )
                     metric = (max_pop - min_pop) / ( District.population / District.count )
-
-                    # If we have exceeded tolerance, return block
-                    if ( metric > tolerance ):
-                        print( 'Returning block group %4d' %voting_district.id )
-                        district.addVotingDistrict( voting_district )
-                        numTransferred -= 1
-                        continue
 
                     # If the current district is now discontiguous,
                     # we need to dissolve the smaller part
                     if not district.isContiguous():
                         district.fixDiscontiguous()
 
-                    # Now need to recheck the neighboring block groups.
-                    # Remove them from the candidates list.  Don't re-add.
-                    # Only doing one pass per district before moving on.
-                    for neighbor in voting_district.neighbors:
-                        if neighbor.voting_district not in district.voting_districts:
-                            continue
-
-                        try:
-                            candidates.pop( (neighbor.voting_district, neighboring_district.id) )
-                        except KeyError:
-                            pass
-
-                    # Get best block group to move
+                    # Get best VTD to move
                     move_me = District.getBestCandidate( candidates )
 
             # Fix discontiguous districts
@@ -523,37 +729,49 @@ class District:
             pops = District.getDistrictPopulations()
             max_pop = max( pops )
             min_pop = min( pops )
-            sd = numpy.std( pops )
-            metric = sd / (District.population / District.count)
+            metric = ( max_pop - min_pop ) / (District.population / District.count)
 
             print( 'Max Pop: ', max_pop )
             print( 'Min Pop: ', min_pop )
-            print( 'Std Dev: %3f' %metric )
+            print( 'Metric: %3f' %metric )
         return
 
     #-----------------------------------------------------------------------
-    # Moves border blocks, one at a time, from one district to another,
+    # Moves border VTDs, one at a time, from one district to another,
     # until the required balance is met.
     #-----------------------------------------------------------------------
-    def balancePopulations( tolerance ):
-        # tolerance: the largest allowable difference in population,
-        #            divided by the average district poplation
-
+    def balancePopulations( tol ):
         # Compute metrics
         pops = District.getDistrictPopulations()
         max_pop = max( pops )
         min_pop = min( pops )
-        sd = numpy.std( pops )
-        metric = (max_pop-min_pop) / (District.population / District.count)
+        metric = (max_pop-min_pop) / numpy.mean( pops )
 
         print( 'Max Pop: ', max_pop )
         print( 'Min Pop: ', min_pop )
-        print( 'Std Dev: %.3f' %sd )
         print( 'Metric:  %.3f' %metric )
-
+        print( 'Tolerance:  %.3f' %tol )
+        
+        # Set max_pop_diff to something too big for first loop
+        max_pop_diff = max_pop
+        
         numTransferred = -1
-        while metric > tolerance and numTransferred != 0:
+        while numTransferred != 0 and metric > tol :
+            print( "Num Transferred last cycle: ", numTransferred )
 
+            # Get max population difference
+            pops = District.getDistrictPopulations()
+            max_pop = max( pops )
+            min_pop = min( pops )
+            metric = (max_pop-min_pop) / (District.population / District.count)
+            
+            # If nothing got better, exit loop
+            if ( max_pop - min_pop >= max_pop_diff ): break
+
+            # Set max_pop_diff
+            max_pop_diff = max_pop - min_pop
+            
+            # Reset numTransferred for this loop
             numTransferred = 0
 
             # Sort districts by population
@@ -567,14 +785,13 @@ class District:
             # Loop over districts in sorted order
             for district in sorted:
 
-                # Build list of candidate block groups to move
-                print( 'Building candidates list...', end='' )
+                # Build list of candidate VTDs to move
+                # print( 'Building candidates list...', end='' )
                 candidates = district.buildCandidateDict()
-                print( 'done.' )
+                # print( 'done.' )
 
-                # Get best block group to move
+                # Get best VTD to move
                 move_me = District.getBestCandidate( candidates )
-
 
                 # Continue until there are no more to move
                 while move_me != None:
@@ -582,7 +799,7 @@ class District:
                     voting_district = move_me[0]
                     neighboring_district = District.districts[move_me[1]]
                     try:
-                        border_ratio = candidates.pop( move_me )
+                        distance_from_centroid = candidates.pop( move_me )
                     except KeyError:
                         # print( '( %d, %d ) not in candidates'
                         #        %(move_me[0].id, move_me[1]) )
@@ -596,51 +813,36 @@ class District:
 
                     # Check population difference between districts.
                     pop_diff = district.population - neighboring_district.population
-                    if pop_diff < voting_district.population:
+                    if pop_diff <= voting_district.population:
                         move_me = District.getBestCandidate( candidates )
                         continue
 
-                    # Move block group to new district
-                    print( 'Moving block group %4d from %2d to %2d'
+                    # Move VTD to new district
+                    print( 'VTD %4d population: %6d'
+                           %( voting_district.id, voting_district.population ) )
+                    print( 'District %2d population: %6d' %( district.id, district.population ) )
+                    print( 'District %2d population: %6d' %( neighboring_district.id, neighboring_district.population ) )
+                    print( 'Moving VTD %4d from %2d to %2d'
                            %( voting_district.id, voting_district.district, neighboring_district.id ) )
+
                     neighboring_district.addVotingDistrict( voting_district )
+                    print( 'VTD %4d is now in %2d'
+                           %( voting_district.id, voting_district.district ) )
+                    print( 'District %2d population: %6d' %( district.id, district.population ) )
+                    print( 'District %2d population: %6d' %( neighboring_district.id, neighboring_district.population ) )
                     numTransferred += 1
 
-                    # We now need to recheck the neighboring block groups
-                    # Remove them from the candidates list, and re-add
-                    for neighbor in voting_district.neighbors:
-                        if neighbor.voting_district not in district.voting_districts:
-                            continue
-
-                        try:
-                            candidates.pop( (neighbor.voting_district, neighboring_district.id) )
-                        except KeyError:
-                            pass
-
-                        for tmp in District.getNeighboringDistricts( neighbor.voting_district ):
-                            # If neighbor not a valid candidate to move to
-                            # the tmp district, continue looping
-                            if not district.isValidCandidate( neighbor.voting_district, tmp ): continue
-
-                            # Get border ratio
-                            border_ratio = District.getBorderRatio( neighbor.voting_district, tmp )
-
-                            # Save this information in dictionary of candidates
-                            candidates.update( {(neighbor.voting_district,tmp): border_ratio} )
-
-                    # Get best block group to move
+                    # Get next best VTD to move
                     move_me = District.getBestCandidate( candidates )
 
             # Recompute metrics
             pops = District.getDistrictPopulations()
             max_pop = max( pops )
             min_pop = min( pops )
-            sd = numpy.std( pops )
             metric = (max_pop-min_pop) / (District.population / District.count)
 
             print( 'Max Pop: ', max_pop )
             print( 'Min Pop: ', min_pop )
-            print( 'Std Dev: %.3f' %sd )
             print( 'Metric:  %.3f' %metric )
         return
 
@@ -659,7 +861,7 @@ class District:
     #-----------------------------------------------------------------------
     def neighboringDistricts( self, candidate ):
         results = []
-        # Loop over neighboring block groups to collect their district IDs
+        # Loop over neighboring VTDs to collect their district IDs
         neighboring_districts = []
         for neighbor in candidate.neighbors:
 
@@ -679,14 +881,14 @@ class District:
 
         # If there are no neighboring district, just return
         if len(neighboring_districts) == 0:
-            print( 'Candidate block group %d is not on a district border' %candidate.id )
+            print( 'Candidate VTD %d is not on a district border' %candidate.id )
             return results
 
         # Loop over neighboring districts
         for neighbor_district in neighboring_districts:
 
-            # To transfer a block group to another district, that district should
-            # have a smaller population than this one minus the block group.
+            # To transfer a VTD to another district, that district should
+            # have a smaller population than this one minus the VTD.
             pop_diff = self.population - neighbor_district.population
             if pop_diff < 0:
                 print( 'District %d has a larger population.' %neighbor_district.id )
@@ -695,8 +897,8 @@ class District:
                 continue                   
 
             if  candidate.population >= pop_diff:
-                print( 'Block group %d has a population larger than difference' %candidate.id )
-                print( '   Block group:    %10d'  %candidate.population )
+                print( 'VTD %d has a population larger than difference' %candidate.id )
+                print( '   VTD:            %10d'  %candidate.population )
                 print( '   This district:  %10d'  %self.population )
                 print( '   District %2d:   %10d'  %(neighbor_district.id, neighbor_district.population) )
                 continue
@@ -705,8 +907,8 @@ class District:
             # Determine difference in total perimeter for this district
             # ---------------------------------------------------------
 
-            # This district will lose this block group's borders with other
-            # districts, and gain this block group's borders with itself.
+            # This district will lose this VTD's borders with other
+            # districts, and gain this VTD's borders with itself.
             dPerimSelf = 0.0
             for tmp in candidate.neighbors:
                 if self.id != tmp.voting_district.district:
@@ -714,8 +916,8 @@ class District:
                 else:
                     dPerimSelf += tmp.border_len
 
-            # Neighboring district will gain this block group's borders with
-            # other districts, and lose this block group's borders with itself.
+            # Neighboring district will gain this VTD's borders with
+            # other districts, and lose this VTD's borders with itself.
             dPerimNeighbor = 0.0
             for tmp in candidate.neighbors:
                 if neighbor_district.id != tmp.voting_district.district:
@@ -735,13 +937,13 @@ class District:
     def reducePopulation( self ):
         totalTransferred = 0
 
-        # Create initial list of candidate block groups for transfer
+        # Create initial list of candidate VTDs for transfer
         # to neighboring districts
 
-        # Collect all block groups that border less populated districts
+        # Collect all VTDs that border less populated districts
         candidates = []
         neighboring_districts = []
-        print( 'Getting candidate block groups to transfer out of %d' %self.id )
+        print( 'Getting candidate VTDs to transfer out of %d' %self.id )
         for candidate in self.voting_districts:
 
             for info in self.neighboringDistricts( candidate ):
@@ -761,12 +963,12 @@ class District:
                 if last_transferred != None:
                     voting_district = last_transferred[0]
                     neighboring_district = last_transferred[1]
-                    print( 'Last: Block Group %d transferred from district %d to %d.'
+                    print( 'Last: VTD %d transferred from district %d to %d.'
                            %( voting_district.id, self.id, neighboring_district.id ) )
                     for dist in discontiguous:
                         District.showDistrictAndBlock( dist, last_transferred[0].id )
                 exit()
-            # Find the candidate block group to transfer which most reduces
+            # Find the candidate VTD to transfer which most reduces
             # total perimeter (or increases total perimeter the least.)
             best = candidates[0]
             for ndx in list(range(1,len(candidates))):
@@ -798,7 +1000,7 @@ class District:
             if len(discontiguous) > 0:
                 self.addVotingDistrict( best[0] )
                 for iDisc in list(range(len(discontiguous))):
-                    print( 'Removing block group %d from District %d made district %d discontiguous'
+                    print( 'Removing VTD %d from District %d made district %d discontiguous'
                            %(best[0].id, self.id, discontiguous[iDisc] ) )
 
                 # Ensure all districts are still contiguous
@@ -808,7 +1010,7 @@ class District:
                     voting_district = best[0]
                     neighboring_district = best[1]
                     for iDisc in list(range(len(discontiguous))):
-                        print( 'Last: Block Group %d transferred from district %d to %d.'
+                        print( 'Last: VTD %d transferred from district %d to %d.'
                                %( voting_district.id, self.id, neighboring_district.id ) )
                         print( '      Replacing it did not fix problem.' )
                         for dist in discontiguous:
@@ -817,7 +1019,7 @@ class District:
                 continue
 
             last_transferred = best
-            print( 'Block Group %d transferred from %d to %d'
+            print( 'VTD %d transferred from %d to %d'
                    %(last_transferred[0].id, self.id, neighbor_district.id ) )
             totalTransferred += 1
 
@@ -841,7 +1043,7 @@ class District:
 
     #------------------------------------------------------------------
     # Returns an list of tuples.
-    # Element [0] is a list of block groups.
+    # Element [0] is a list of VTDs.
     # Element [1] is the population of the island.
     #------------------------------------------------------------------
     def getIslands( self ):
@@ -849,7 +1051,7 @@ class District:
         voting_districts = set( self.voting_districts )
         islands = []
         while len(voting_districts) > 0:
-            print( 'block groups remaining: %d' %len(voting_districts) )
+            print( 'VTDs remaining: %d' %len(voting_districts) )
             island = []
             population = 0
             start = voting_districts.pop()
@@ -857,11 +1059,11 @@ class District:
             new_pop = start.population
             while new_pop != 0:
                 new_pop = 0
-                # Loop thru block groups currently in this island
+                # Loop thru VTDs currently in this island
                 for ndx in list(range(len(island))):
                     voting_district = island[ndx]
 
-                    # Loop thru block groups nieghbors
+                    # Loop thru VTDs nieghbors
                     for neighbor in voting_district.neighbors:
                         # If neighbor is in the same district
                         if ( neighbor.voting_district.district == self.id ):
@@ -900,15 +1102,15 @@ class District:
             count = 0
             while len(island[0]) > 0:
                 count += 1
-                print( len(island[0]), ' block groups left to move' ) 
+                print( len(island[0]), ' VTDs left to move' ) 
                 tmp.clear()
-                # Get the first block group
+                # Get the first VTD
                 for voting_district in island[0]:
                     old_district_id = voting_district.district
                     if old_district_id != self.id: continue
 
                     print( 'This district: %d' %self.id )
-                    print( 'Trying to relocate block group %d from %d.'
+                    print( 'Trying to relocate VTD %d from %d.'
                            % (voting_district.id,voting_district.district) )
                     for neighbor in voting_district.neighbors:
                         print( '  Neighbor %d is in %d.'
@@ -918,8 +1120,8 @@ class District:
                             new_district_id = neighbor.voting_district.district
                             new_district = District.districts[new_district_id]
                             new_district.addVotingDistrict( voting_district )
-                            print( 'Moving %d from %d to %d'
-                                   %(voting_district.id,old_district_id,new_district_id) )
+                            # print( 'Moving %d from %d to %d'
+                            #        %(voting_district.id,old_district_id,new_district_id) )
                             break
                     if count > 10: continue
                     if voting_district.district == old_district_id:

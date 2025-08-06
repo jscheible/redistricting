@@ -35,17 +35,47 @@ class VotingDistrict:
                 nUnassigned += 1
         return nUnassigned
 
+    def getBorderLenWithDistrict( self, district ):
+        border_len = 0.0
+        for neighbor in self.neighbors:
+            if neighbor.voting_district.district == district:
+                border_len += neighbor.border_len
+
+        return border_len
+        
+    def getBorderRatioWithDistrict( self, district ):
+        border_len = 0.0
+        for neighbor in self.neighbors:
+            if neighbor.voting_district.district == district:
+                border_len += neighbor.border_len
+
+        return border_len / self.perimeter
+        
     def getBorderLen( self ):
         if self.border_len > 0.0:
             return self.border_len
-        
+
+        # Loop over neighbor VTDs
         for neighbor in self.neighbors:
-            self.border_len += neighbor.border_len
-            # print( '   %d: %f' %( neighbor.voting_district.id, neighbor.border_len ) )
+            if neighbor.voting_district.district == self.district:
+                self.border_len += neighbor.border_len
+
         delta = self.perimeter - self.border_len 
         print( '%d: Delta=%0.3f' %( self.id, delta ) )
         if ( delta > 1.0 ): self.isBorder = True
         return self.border_len
+
+    #--------------------------------------------------------------------------
+    # Compute ratio of a voting district's border with its own district.
+    # A border ratio of 1.0 means that it is not a border VTD.
+    #--------------------------------------------------------------------------
+    def getBorderRatio( self ):
+        this_district_border = 0.0
+        for neighbor in self.neighbors:
+            if neighbor.voting_district.district == self.district:
+                this_district_border += neighbor.border_len
+
+        return ( this_district_border / self.perimeter )
 
     def plotBorder():
         # Read VA block group shape file
@@ -93,10 +123,10 @@ class VotingDistrict:
         # Ensure we do not double-count by using sets
         voting_district_set = set( voting_districts )
         for voting_district in voting_district_set:
-            # Add perimeter of block group to perimeter of group
+            # Add perimeter of VTD to perimeter of group
             perimeter += voting_district.perimeter
 
-            # Loop over neighboring block groups
+            # Loop over neighboring VTDs
             for neighbor in voting_district.neighbors:
                 # If neighbor is in this group, subtract border length
                 if ( neighbor.voting_district in voting_district_set ):
