@@ -135,15 +135,20 @@ def minimizeTotalPerimeter():
         totalPerimeter = sum( district_perimeters ) / 1000.0
 
 def plotDistricts():
+    numColors = 8
     # Add district columns
     cong_dist = []
+    color = []
     for voting_district in VotingDistrict.voting_districts:
         cong_dist.append( voting_district.district )
+        color.append( voting_district.district % numColors )
 
     data['CongDist'] = cong_dist
+    data['Color'] = color
     print( data.head() )
 
-    data.plot(column='CongDist')
+    # data.plot(column='CongDist')
+    data.plot(column='Color')
     plt.show()
 
 def findWorstProtrusion():
@@ -276,7 +281,7 @@ for ndx in data.index:
     vtd.intptlat   = float( data.at[ndx,'INTPTLAT20'] )
     vtd.intptlon   = float( data.at[ndx,'INTPTLON20'] )
     vtd.area       = float( data.at[ndx,'ALAND20'] ) + float( data.at[ndx,'AWATER20'] )
-    
+
     try:
         vtd.democrat   = int( data.at[ndx,'DEMOCRAT'] )
         vtd.republican = int( data.at[ndx,'REPUBLICAN'] )
