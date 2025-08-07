@@ -41,7 +41,7 @@ class District:
             sum_pop += vtd.population
 
         return sum_lat/sum_pop, sum_lon/sum_pop
-    
+
     def voting():
         print( '----------------------------------------------------' )
         print( '| District ID |   Democrat   | Republican | Result |' )
@@ -131,7 +131,7 @@ class District:
             self.getPerimeter()
             self.compactness = self.area / ((self.perimeter/1000.0)*(self.perimeter/1000.0))
         return self.compactness
-    
+
     #-----------------------------------------------------------------------
     # Returns the VTD furthest from the population centroid
     #-----------------------------------------------------------------------
@@ -145,7 +145,7 @@ class District:
                 mostDistant = dist
 
         return furthest
-        
+
     #-----------------------------------------------------------------------
     # Returns the largest voting district by number of VTDs
     #-----------------------------------------------------------------------
@@ -160,6 +160,17 @@ class District:
 
     def numVotingDistricts( self ):
         return len( self.voting_districts )
+
+    def showMetrics():
+        # Recompute metrics
+        pops = District.getDistrictPopulations()
+        max_pop = max( pops )
+        min_pop = min( pops )
+        metric = ( max_pop - min_pop ) / (District.population / District.count)
+
+        print( 'Max Pop: ', max_pop )
+        print( 'Min Pop: ', min_pop )
+        print( 'Metric: %3f' %metric )
 
     #-------------------------------------------------------------------------
     # Returns the length of the border between this list of VTDs
@@ -458,7 +469,7 @@ class District:
                     break
 
         return sorted
-    
+
     #-----------------------------------------------------------------------
     # Performs an insertion sort and returns list of district IDs
     # from largest perimeter to smallest.
@@ -481,6 +492,32 @@ class District:
 
         return sorted
 
+    #------------------------------------------------------------------------
+    # Get VTDs that have a border with another district that is longer
+    # than the border with their own district.
+    #------------------------------------------------------------------------
+    def getCandidates2():
+        candidates = {}
+        for vtd in VotingDistrict.voting_districts:
+            # Get the border ratio for this VTD
+            border_ratio = vtd.getBorderRatio()
+
+            # If border ratio is over 0.5, go to next
+            if border_ratio >= 0.5: continue
+
+            # If there is a border with another district that is longer, add to candidates
+            for neighbor in vtd.neighbors:
+                ratio = vtd.getBorderRatioWithDistrict( neighbor.voting_district.district )
+                if ratio > border_ratio:
+                    candidates.update( { vtd: border_ratio } )
+                    continue
+        return candidates
+
+    #------------------------------------------------------------------------
+    # Move the VTD with the smallest border ratio with its own district.
+    # Move to the neighbor district with the largest border ratio.
+    # Rebuild the candidate list after each moved VTD.
+    #------------------------------------------------------------------------
     def minimizeTotalPerimeter2( tolerance ):
         # tolerance: the largest allowable difference in population, divided by the average
         # Compute metrics
@@ -491,6 +528,7 @@ class District:
         min_pop = min( pops )
         metric = (max_pop - min_pop) / ( District.population / District.count )
 
+        print( 'Minimizing total perimeter.' )
         print( 'Max Pop: %7d' %max_pop )
         print( 'Max Allowed: %7d' %max_allowed_population )
         print( 'Min Pop: %7d' %min_pop )
@@ -505,44 +543,34 @@ class District:
             numTransferred = 0
 
             # Get all border VTDs
-            candidates = {}
-            for vtd in VotingDistrict.voting_districts:
-                # Get the border ratio for this VTD
-                border_ratio = vtd.getBorderRatio()
-
-                # If border ratio is over 0.5, go to next
-                if border_ratio >= 0.5: continue
-
-                # If there is a border with another district that is longer, add to candidates
-                for neighbor in vtd.neighbors:
-                    ratio = vtd.getBorderRatioWithDistrict( neighbor.voting_district.district )
-                    if ratio > border_ratio:
-                        candidates.update( { vtd: border_ratio } )
-                        continue
+            candidates = District.getCandidates2()
 
             # Get best VTD to move
             move_me = District.getBestCandidate( candidates )
 
-            # Continue until there are no more to move
-            while move_me != None:
+            # Continue until there are no more candidates to move or one has been moved
+            while move_me != None and numTransferred <= 0:
 
                 thisVTD = move_me
                 try:
                     border_ratio = candidates.pop( move_me )
-                    # print( "Border Ratio: ", border_ratio )
+                    print( "Border Ratio: ", border_ratio )
                 except KeyError:
                     move_me = District.getBestCandidate( candidates )
                     continue
 
                 # Get VTD's current district
                 thisDistrict = District.districts[thisVTD.district]
-                
+                print( "Current district: ", thisDistrict.id )
+
                 # Get thisVTD's neighboring districts and border ratios
                 neighboring_districts = {}
                 for neighbor in District.getNeighboringDistricts( thisVTD ):
-                    neighbor_border_ratio = thisVTD.getBorderLenWithDistrict( neighbor ) / thisVTD.perimeter
+                    print( "Neighbor district: ", neighbor )
+                    neighbor_border_ratio = thisVTD.getBorderRatioWithDistrict( neighbor )
+                    print( "Neighbor Border Ratio: ", neighbor_border_ratio )
                     if neighbor_border_ratio > border_ratio:
-                        neighboring_districts.update( {neighbor:border_ratio} )
+                        neighboring_districts.update( {neighbor:neighbor_border_ratio} )
 
                 # Loop over these pulling one with the longest border first
                 while len( neighboring_districts ) > 0:
@@ -559,10 +587,10 @@ class District:
                     if longest_neighbor_district == None:
                         move_me = District.getBestCandidate( candidates )
                         break
-                        
+
                     # Remove longest from dictionary
                     neighboring_districts.pop( longest_neighbor_district_id )
-                
+
                     # Ensure that this candidate is still valid
                     if not thisDistrict.isValidCandidate( thisVTD, longest_neighbor_district_id ):
                         continue
@@ -583,18 +611,15 @@ class District:
                     print( 'Moving VTD %4d from %2d to %2d'
                            %( thisVTD.id, thisVTD.district, longest_neighbor_district_id ) )
                     longest_neighbor_district.addVotingDistrict( thisVTD )
-                    break
-                
-                # Recompute metrics.
-                pops = District.getDistrictPopulations()
-                max_pop = max( pops )
-                min_pop = min( pops )
-                metric = (max_pop - min_pop) / ( District.population / District.count )
+                    numTransferred += 1
 
-                # If the current district is now discontiguous,
-                # we need to dissolve the smaller part
-                if not thisDistrict.isContiguous():
-                    thisDistrict.fixDiscontiguous()
+                    # If the current district is now discontiguous,
+                    # we need to dissolve the smaller part
+                    if not thisDistrict.isContiguous():
+                        print( "District has become discontiguous.  Fixing." )
+                        thisDistrict.fixDiscontiguous()
+
+                    break
 
                 # Get next best VTD to move
                 move_me = District.getBestCandidate( candidates )
@@ -612,7 +637,7 @@ class District:
             print( 'Min Pop: ', min_pop )
             print( 'Metric: %3f' %metric )
         return
-    
+
     def minimizeTotalPerimeter( tolerance ):
         # tolerance: the largest allowable difference in population, divided by the average
         # Compute metrics
@@ -688,7 +713,7 @@ class District:
                     if longest_neighbor_district == None:
                         move_me = District.getBestCandidate( candidates )
                         continue
-                        
+
                     # Ensure that this candidate is still valid
                     if not district.isValidCandidate( thisVTD, longest_neighbor_district ):
                         move_me = District.getBestCandidate( candidates )
@@ -751,10 +776,13 @@ class District:
         print( 'Min Pop: ', min_pop )
         print( 'Metric:  %.3f' %metric )
         print( 'Tolerance:  %.3f' %tol )
-        
+
+        # If Metric is already below tolerance, exit
+        if metric <= tol: return
+
         # Set max_pop_diff to something too big for first loop
         max_pop_diff = max_pop
-        
+
         numTransferred = -1
         while numTransferred != 0 and metric > tol :
             print( "Num Transferred last cycle: ", numTransferred )
@@ -764,13 +792,13 @@ class District:
             max_pop = max( pops )
             min_pop = min( pops )
             metric = (max_pop-min_pop) / (District.population / District.count)
-            
+
             # If nothing got better, exit loop
             if ( max_pop - min_pop >= max_pop_diff ): break
 
             # Set max_pop_diff
             max_pop_diff = max_pop - min_pop
-            
+
             # Reset numTransferred for this loop
             numTransferred = 0
 
