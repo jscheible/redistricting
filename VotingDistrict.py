@@ -24,10 +24,10 @@ class VotingDistrict:
         for voting_district in self.embedded:
             pop += voting_district.population
         return pop
-    
+
     def getVotingDistrictCount():
         return len( VotingDistrict.voting_districts )
-    
+
     def getNumUnassigned():
         nUnassigned = 0
         for voting_district in VotingDistrict.voting_districts:
@@ -42,7 +42,7 @@ class VotingDistrict:
                 border_len += neighbor.border_len
 
         return border_len
-        
+
     def getBorderRatioWithDistrict( self, district ):
         border_len = 0.0
         for neighbor in self.neighbors:
@@ -50,7 +50,7 @@ class VotingDistrict:
                 border_len += neighbor.border_len
 
         return border_len / self.perimeter
-        
+
     def getBorderLen( self ):
         if self.border_len > 0.0:
             return self.border_len
@@ -100,7 +100,7 @@ class VotingDistrict:
         va['ThisOne'] = isThisVotingDistrict
         va.plot(column='ThisOne')
         plt.show()
-        
+
     def plotNeighbors( self ):
         # Read VA block group shape file
         va = gpd.read_file( "census/tl_2010_51_bg10.shp" )
@@ -137,7 +137,7 @@ class VotingDistrict:
     def isEmbedded( self ):
         return ( len(self.neighbors) == 1 and 
                  self.neighbors[0].border_len == self.perimeter )
-        
+
     def plotEmbeddedVotingDistricts():
         # Read VA block group shape file
         va = gpd.read_file( "census/tl_2010_51_bg10.shp" )
@@ -147,7 +147,7 @@ class VotingDistrict:
         for voting_district in VotingDistrict.voting_districts:
             if voting_district.isEmbedded():
                 isEmbedded[voting_district.id] = True
-                
+
         # Add embedded column
         va['isEmbedded'] = isEmbedded
         va.plot(column='isEmbedded')
