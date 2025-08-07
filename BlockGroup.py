@@ -24,10 +24,10 @@ class BlockGroup:
         for block_group in self.embedded:
             pop += block_group.population
         return pop
-    
+
     def getBlockGroupCount():
         return len( BlockGroup.block_groups )
-    
+
     def getNumUnassigned():
         nUnassigned = 0
         for block_group in BlockGroup.block_groups:
@@ -38,7 +38,7 @@ class BlockGroup:
     def getBorderLen( self ):
         if self.border_len > 0.0:
             return self.border_len
-        
+
         for neighbor in self.neighbors:
             self.border_len += neighbor.border_len
             # print( '   %d: %f' %( neighbor.block_group.id, neighbor.border_len ) )
@@ -70,7 +70,7 @@ class BlockGroup:
         va['ThisOne'] = isThisBlockGroup
         va.plot(column='ThisOne')
         plt.show()
-        
+
     def plotNeighbors( self ):
         # Read VA block group shape file
         va = gpd.read_file( "census/tl_2010_51_bg10.shp" )
@@ -107,7 +107,7 @@ class BlockGroup:
     def isEmbedded( self ):
         return ( len(self.neighbors) == 1 and 
                  self.neighbors[0].border_len == self.perimeter )
-        
+
     def plotEmbeddedBlockGroups():
         # Read VA block group shape file
         va = gpd.read_file( "census/tl_2010_51_bg10.shp" )
@@ -117,7 +117,7 @@ class BlockGroup:
         for block_group in BlockGroup.block_groups:
             if block_group.isEmbedded():
                 isEmbedded[block_group.id] = True
-                
+
         # Add embedded column
         va['isEmbedded'] = isEmbedded
         va.plot(column='isEmbedded')
