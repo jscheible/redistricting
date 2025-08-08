@@ -134,8 +134,7 @@ def minimizeTotalPerimeter():
             district_perimeters.append( district.getPerimeter() )
         totalPerimeter = sum( district_perimeters ) / 1000.0
 
-def plotDistricts():
-    numColors = 8
+def plotDistricts( numColors = 8 ):
     # Add district columns
     cong_dist = []
     color = []
@@ -351,7 +350,7 @@ plotDistricts()
 
 exit()
 
-# Find the worst VTD abd plot it.
+# Find the worst VTD and plot it.
 worst = None
 worst_ratio = 0.0
 for vtd in VotingDistrict.voting_districts:
