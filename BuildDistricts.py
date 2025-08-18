@@ -245,6 +245,7 @@ def parse_command_line():
 
             if currentArgument in ("-h", "--help"):
                 print ( "Displaying Help" )
+                exit()
 
             elif currentArgument in ("-s", "--shape-file"):
                 shape_file = currentValue
@@ -345,6 +346,7 @@ while worst_ratio > 3.0 and count < max_count:
 
 print( 'Final Build:' )
 District.info()
+District.voting()
 # District.voting()
 plotDistricts()
 
