@@ -1,4 +1,4 @@
-import censusdata
+import census
 import math
 import ast
 import statistics
