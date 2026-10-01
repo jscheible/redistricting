@@ -60,7 +60,7 @@ This program will take a lot of time, as it matches the borders of VTDs to find 
 
 ## Build the districts.
 
-Once we've created the combined VTD/population shapefile, we use that as input tpo the next program:
+Once we've created the combined VTD/population shapefile, we use that as input to the next program:
 ```
 $ python3 ./BuildDistricts.py -s Texas/jax_2020.shp -n 38 -t 0.10
 ```
