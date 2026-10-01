@@ -1,21 +1,13 @@
-from shapely.geometry import Point, Polygon, MultiPolygon, MultiLineString, LineString, shape, mapping
+from shapely.geometry import Polygon, MultiPolygon, MultiLineString, LineString, shape, mapping
 from collections import OrderedDict
-import ast
 import numpy
 import fiona
-import censusdata
 import math
-import statistics
 import csv
-from tabulate import tabulate
-import plotly.figure_factory as ff
-import sys, getopt
+import sys
+import getopt
 from copy import copy
-import tkinter
 import geopandas as gpd
-import earthpy
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 
 # ---------------------------------------------------------------------
 #  LL_TO_M()
